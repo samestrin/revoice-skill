@@ -1,0 +1,11 @@
+# Personal data: never commit email, samples, or profiles
+*.mbox
+samples/
+reference/
+voice-profile.json
+config.yaml
+voice/
+skill/revoice/assets/*.md
+!skill/revoice/assets/README.md
+__pycache__/
+.DS_Store
