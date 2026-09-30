@@ -1,4 +1,4 @@
-# revoice config. Copy to ~/.config/revoice/config.yaml
+# revoice config. /revoice --build copies this to ~/.config/revoice/config.yaml
 # (Windows: C:\Users\<you>\.config\revoice\config.yaml). The skill reads it on every run.
 
 # Voice used when --voice is not given. Must match a file in the skill's assets/<slug>.md

@@ -18,8 +18,9 @@ Samples come from extract-samples.py. If index.csv has a "verdict" column
 (from the review step), only KEEP rows are used, best "score" first.
 Otherwise every sample is used, longest first.
 
-The API key is read from --api-key or the TEXT_ANALYSIS_API_KEY environment
-variable.
+The API key is read from --api-key, else the TEXT_ANALYSIS_API_KEY environment
+variable, else the key file (default ~/.config/revoice/api-key). The key file
+keeps the key out of chat transcripts and shell history.
 """
 from __future__ import annotations
 import argparse
@@ -28,15 +29,32 @@ import json
 import os
 import statistics
 import sys
+import urllib.error
 import urllib.request
 from datetime import date
 from pathlib import Path
 
 
+# The API accepts at most this many documents per list ("texts" and
+# "reference_texts" separately).
+MAX_DOCS = 100
+
+
 def post(api: str, path: str, body: dict, key: str) -> dict:
     headers = {"Content-Type": "application/json", "X-API-Key": key}
     req = urllib.request.Request(api + path, json.dumps(body).encode(), headers)
-    return json.load(urllib.request.urlopen(req, timeout=600))
+    try:
+        return json.load(urllib.request.urlopen(req, timeout=600))
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        sys.exit(f"error: {path} returned HTTP {e.code}: {detail}")
+
+
+def profiles(api: str, texts: list[str], key: str) -> list[dict]:
+    out = []
+    for i in range(0, len(texts), MAX_DOCS):
+        out += post(api, "/analyze/voice-profile", {"texts": texts[i:i + MAX_DOCS]}, key)["results"]
+    return out
 
 
 def body(path: Path) -> str:
@@ -71,12 +89,18 @@ def main() -> None:
                     help="the date the mbox was filtered to, recorded in the profile (YYYY-MM-DD)")
     ap.add_argument("--api", default="https://text-analysis-api.estr.in")
     ap.add_argument("--api-key", default=os.environ.get("TEXT_ANALYSIS_API_KEY"))
+    ap.add_argument("--api-key-file", type=Path,
+                    default=Path.home() / ".config" / "revoice" / "api-key")
     ap.add_argument("--top", type=int, default=15,
                     help="samples joined into the voice profile (about 15 worked best in testing)")
     ap.add_argument("-o", "--out", type=Path, default=Path("voice-profile.json"))
     args = ap.parse_args()
+    if not args.api_key and args.api_key_file.is_file():
+        # utf-8-sig: Notepad and PowerShell may save the file with a BOM
+        args.api_key = args.api_key_file.read_text(encoding="utf-8-sig").strip()
     if not args.api_key:
-        sys.exit("error: no API key. Pass --api-key or set TEXT_ANALYSIS_API_KEY.")
+        sys.exit(f"error: no API key. Save it in {args.api_key_file}, "
+                 "or set TEXT_ANALYSIS_API_KEY, or pass --api-key.")
     api, key = args.api.rstrip("/"), args.api_key
 
     files = ranked_files(args.samples)
@@ -92,9 +116,8 @@ def main() -> None:
     voice_profile = post(api, "/analyze/voice-profile",
                          {"texts": ["\n\n".join(texts[: args.top])]}, key)["results"][0]
 
-    author_vectors = post(api, "/analyze/voice-profile", {"texts": texts}, key)["results"]
-    reference_vectors = (post(api, "/analyze/voice-profile", {"texts": reference}, key)["results"]
-                         if reference else [])
+    author_vectors = profiles(api, texts, key)
+    reference_vectors = profiles(api, reference, key) if reference else []
     feats = sorted(author_vectors[0]["feature_vector"])
     pool = [p["feature_vector"] for p in author_vectors + reference_vectors]
     baseline = {
@@ -104,9 +127,16 @@ def main() -> None:
     author_mean = {k: round(statistics.fmean(p["feature_vector"][k] for p in author_vectors), 6)
                    for k in feats}
 
-    fp_body = {"texts": texts}
-    if reference:
-        fp_body["options"] = {"reference_texts": reference}
+    # The fingerprint compares the whole set at once, so it cannot be batched:
+    # use the best samples and the longest reference texts, up to the API limit.
+    fp_texts = texts[:MAX_DOCS]
+    fp_reference = sorted(reference, key=len, reverse=True)[:MAX_DOCS]
+    if len(texts) > MAX_DOCS or len(reference) > MAX_DOCS:
+        print(f"note: fingerprint uses {len(fp_texts)} of {len(texts)} samples and "
+              f"{len(fp_reference)} of {len(reference)} reference texts (API limit {MAX_DOCS})")
+    fp_body = {"texts": fp_texts}
+    if fp_reference:
+        fp_body["options"] = {"reference_texts": fp_reference}
     fp = post(api, "/analyze/fingerprint", fp_body, key)
 
     health = json.load(urllib.request.urlopen(api + "/health", timeout=30))

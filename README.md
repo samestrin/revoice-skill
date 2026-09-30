@@ -1,6 +1,6 @@
 # revoice
 
-A Claude Code skill that rewrites text so it sounds like you wrote it, not an AI. It works from a voice profile built from your own email, written before AI tools existed.
+A Claude Code skill that rewrites text so it sounds like you wrote it, not an AI. It works from a voice profile built from your own corpus of text, for example your email from before AI tools existed.
 
 ```
 /revoice <text>
@@ -8,105 +8,85 @@ A Claude Code skill that rewrites text so it sounds like you wrote it, not an AI
 /revoice --audience=formal --output-path=out\letter.md @draft.md
 ```
 
-The repository has two parts:
-
-- `skill/revoice/`: the skill itself.
-- `profile/`: helpers that build your voice profile from an email export.
+Getting started is three steps: install the skill, save your API key, and run `/revoice --build`. Claude then walks you through building your voice profile.
 
 ## How it works
 
-1. Export your sent email as an MBOX file.
-2. The helpers keep only emails from before AI tools, pull out what you wrote yourself, and send the best ones to a text analysis API that measures your style.
-3. Claude turns the measurements plus your real emails into a readable voice profile, one Markdown file.
-4. `/revoice` uses that file to rewrite any text in your voice.
+1. You export your sent email as an MBOX file.
+2. `/revoice --build` keeps only emails from before AI tools, pulls out what you wrote yourself, and has Claude pick the ones that really sound like you.
+3. The best ones go to a text analysis API that measures your style.
+4. Claude turns the measurements plus your real emails into a voice file, one readable Markdown file.
+5. `/revoice` uses that file to rewrite any text in your voice.
 
 ## Requirements
 
 - Claude Code.
-- Python 3.10 or newer. The helpers use only the standard library.
-- An API key for the text analysis API (see below). The key is only needed to build the profile, not to use the skill.
-
-On Windows, run Python as `python`. `python3` on Windows is usually a Microsoft Store shortcut, not real Python.
+- Python 3.10 or newer. The helpers use only the standard library. On Windows, Python runs as `python`; `python3` there is usually a Microsoft Store shortcut.
+- An API key for the text analysis API. It is only needed to build the profile, not to use the skill.
 
 ## Text analysis API
-
-The profile is measured by a text analysis API:
 
 - API: https://text-analysis-api.estr.in/
 - Docs: https://text-analysis-api.estr.in/swagger-ui/
 
-Every request needs your key in an `X-API-Key` header. `build-profile.py` already points at this API, so you only have to supply the key (step 5 below). You never call the API by hand.
+Every request needs your key in an `X-API-Key` header. The build already points at this API and reads the key from a file (step 2 below), so you never call the API by hand and never paste the key into Claude.
 
-## Install the skill
+## 1. Install the skill
 
-PowerShell:
+PowerShell, from the repository folder:
 
 ```powershell
 Copy-Item -Recurse skill\revoice "$HOME\.claude\skills\revoice"
-New-Item -ItemType Directory -Force "$HOME\.config\revoice" | Out-Null
-Copy-Item config.example.yaml "$HOME\.config\revoice\config.yaml"
 ```
 
 macOS or Linux:
 
 ```bash
 cp -R skill/revoice ~/.claude/skills/revoice
-mkdir -p ~/.config/revoice && cp config.example.yaml ~/.config/revoice/config.yaml
 ```
 
-Then open the config and set `default_voice` to your slug, for example `joe-smith`. Your voice file will be `assets/joe-smith.md` inside the installed skill folder. Start a new Claude Code session so it picks up the skill.
+Start a new Claude Code session so it picks up the skill. The first `/revoice --build` creates your config at `~/.config/revoice/config.yaml`.
 
-## Build your voice profile
+## 2. Save your API key
 
-Run these from the repository folder. The examples are PowerShell. Your email stays on your machine except for the samples sent to the API in step 4.
+Save the key in a file that only you read. Claude checks that the file exists but never opens it, so the key stays out of your chat transcripts.
 
-**1. Export your sent mail.** For Gmail, use Google Takeout, choose Mail, and pick only the "Sent" label. You get an `.mbox` file. Large exports are fine; the helpers read them one message at a time.
-
-**2. Keep only emails from before AI tools.**
+Windows (PowerShell):
 
 ```powershell
-python profile\mbox-filter-before.py Sent.mbox --before 2022-09-01 -o pre-ai.mbox
+New-Item -ItemType Directory -Force "$HOME\.config\revoice" | Out-Null
+notepad "$HOME\.config\revoice\api-key"
 ```
 
-`2022-09-01` is three months before ChatGPT launched. Emails with no readable date are dropped.
+Paste the key, save, and close Notepad.
 
-**3. Pull out what you wrote.** Use every address you have sent from:
+macOS: copy the key, then:
 
-```powershell
-python profile\extract-samples.py pre-ai.mbox --from you@example.com --from you@work.com -o samples
-python profile\extract-samples.py pre-ai.mbox --from you@example.com --from you@work.com --others -o reference
+```bash
+mkdir -p ~/.config/revoice && pbpaste > ~/.config/revoice/api-key
 ```
 
-The first command writes one file per email you wrote, with quoted replies, signatures, forwards and duplicates removed. The second is optional but recommended: it collects other people's emails from the same mailbox, so the API can tell which phrases are really yours rather than just common. Without it, your "signature phrases" come out generic ("let me know", "need to").
+## 3. Build your voice profile
 
-**4. Review the samples with Claude.** In Claude Code, from the repository folder:
+First export your sent mail. For Gmail, use Google Takeout, choose Mail, and pick only the "Sent" label. You get an `.mbox` file. Large exports are fine.
 
-> Follow step A in profile/INSTRUCTIONS.md on the samples folder.
+Then, in Claude Code:
 
-Claude marks each email KEEP or DROP and scores it. Aim for 15 or more KEEP.
-
-**5. Build the profile.**
-
-```powershell
-$env:TEXT_ANALYSIS_API_KEY = "<your key>"
-python profile\build-profile.py --samples samples --reference reference --author "Your Name" --from you@example.com --cutoff 2022-09-01 -o voice-profile.json
+```
+/revoice --build
 ```
 
-The key goes in `TEXT_ANALYSIS_API_KEY` for this PowerShell window only; it is not saved anywhere. On macOS or Linux use `export TEXT_ANALYSIS_API_KEY=...`. Leave out `--reference reference` if you skipped it in step 3.
+Claude asks for the `.mbox` path, the addresses you send from, your name, and a few defaults, then does the rest: filtering, extracting, reviewing, building the profile, and writing your voice file. Claude Code asks you to approve when it saves the voice file into the skill folder. At the end it rewrites a sample email so you can see the result.
 
-**6. Write the voice file with Claude.**
+You can also give the answers up front:
 
-> Follow step B in profile/INSTRUCTIONS.md. Save it to voice/your-name.md.
-
-Read the result and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time. Then copy it into the installed skill (Claude Code treats its own skills folder as protected, so do this step yourself):
-
-```powershell
-Copy-Item voice\your-name.md "$HOME\.claude\skills\revoice\assets\your-name.md"
+```
+/revoice --build mbox=C:\Users\you\Downloads\Sent.mbox from=you@example.com,you@work.com name="Your Name"
 ```
 
-After any later edit to `voice/your-name.md`, copy it again.
+Read the voice file it wrote (`assets/<your-slug>.md` in the skill folder) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
-**Keep private files private.** The `.mbox`, `samples/`, `reference/`, `voice-profile.json` and `voice/` are all personal. `.gitignore` keeps them out of Git.
+**Your email stays on your machine.** Only the samples chosen for your profile go to the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file.
 
 ## Use the skill
 
@@ -118,10 +98,15 @@ After any later edit to `voice/your-name.md`, copy it again.
 | `--template=<path>` | Follows a template's layout (for example an email record format). The voice still controls the wording. |
 | `--audience=casual\|business\|formal` | Steers the tone. Without it, you get your plain voice. |
 | `--voice=<slug>` | Uses a different voice file. |
+| `--build` | Builds a new voice profile (above). |
 
 The skill keeps every fact, number, name and ask from the input. It does not add new ones.
 
-**Tuning.** To change how it writes, edit your voice file. For example, add a line to its "Do not" section. To tune one audience, create `assets/<slug>-formal.md` with only the differences (for example "no idioms, sign off with Regards,").
+**Tuning.** To change how it writes, edit your voice file, for example by adding a line to its "Do not" section. To tune one audience, create `assets/<slug>-formal.md` next to it with only the differences (for example "no idioms, sign off with Regards,"). It adds to your voice file rather than replacing it. Without one, the skill uses its own built-in steering for that audience.
+
+## Running the steps by hand
+
+The helpers are in `skill/revoice/build/` and each has `--help`. The order is `mbox-filter-before.py`, `extract-samples.py` (again with `--others` for the reference set), a review of `samples/index.csv`, then `build-profile.py`. `skill/revoice/build.md` describes each step, including the review rules and the voice file format.
 
 ## Optional: SilverBullet
 

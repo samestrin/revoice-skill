@@ -1,8 +1,8 @@
 ---
 name: revoice
-description: Rewrite a body of text so it reads like a specific person wrote it, using a voice profile stored as a local asset (default voice from config). Input is inline text or an @file. Optional --voice= picks a profile, --audience=casual|business|formal steers it (using an <voice>-<audience>.md overlay if one exists), --template= supplies a structure to follow (local path, or sb:<note> for SilverBullet), --output-path= saves the result (local path, or sb:<note> for SilverBullet); with no output path the rewrite is only shown. SilverBullet support is optional; without it everything works with local files. --sync pulls voice profiles from SilverBullet into the skill's assets. Use when the user runs /revoice or asks to rewrite, redraft, or convert text "in my voice" / "like me".
-argument-hint: '[--voice=<slug>] [--audience=casual|business|formal] [--template=[sb:]<path>] [--output-path=[sb:]<path>] (@file | <text>)  |  --sync[=<slug>]'
-allowed-tools: Read, Write, Bash(ls:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(python3 ~/.claude/skills/revoice/sync.py:*), Bash(python ~/.claude/skills/revoice/sync.py:*), mcp__silverbullet__read-note, mcp__silverbullet__create-note
+description: Rewrite a body of text so it reads like a specific person wrote it, using a voice profile stored as a local asset (default voice from config). Input is inline text or an @file. Optional --voice= picks a profile, --audience=casual|business|formal steers it (using an <voice>-<audience>.md overlay if one exists), --template= supplies a structure to follow (local path, or sb:<note> for SilverBullet), --output-path= saves the result (local path, or sb:<note> for SilverBullet); with no output path the rewrite is only shown. SilverBullet support is optional; without it everything works with local files. --sync pulls voice profiles from SilverBullet into the skill's assets. --build walks the user through building their own voice profile from an email export (mbox). Use when the user runs /revoice or asks to rewrite, redraft, or convert text "in my voice" / "like me".
+argument-hint: '[--voice=<slug>] [--audience=casual|business|formal] [--template=[sb:]<path>] [--output-path=[sb:]<path>] (@file | <text>)  |  --sync[=<slug>]  |  --build'
+allowed-tools: Read, Write, Bash(ls:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(python3 ~/.claude/skills/revoice/sync.py:*), Bash(python ~/.claude/skills/revoice/sync.py:*), Bash(python:*), Bash(python3:*), Bash(test:*), mcp__silverbullet__read-note, mcp__silverbullet__create-note
 ---
 
 # revoice
@@ -32,6 +32,10 @@ The SilverBullet keys (`sb_base`, `default_template` when it is an `sb:` ref, `s
 If the config file is missing, stop and tell the user to create it from `config.example.yaml`. Do not guess defaults.
 
 If an `sb:` ref is used but the SilverBullet MCP tools are not available, stop and say so. Do not fall back to a local path.
+
+## Build mode
+
+If the arguments contain `--build`, read `~/.claude/skills/revoice/build.md` and follow it from the top. Skip everything else in this file.
 
 ## Step 1: Parse arguments
 

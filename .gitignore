@@ -5,6 +5,7 @@ reference/
 voice-profile.json
 config.yaml
 voice/
+api-key
 skill/revoice/assets/*.md
 !skill/revoice/assets/README.md
 __pycache__/
