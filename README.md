@@ -24,9 +24,18 @@ The repository has two parts:
 
 - Claude Code.
 - Python 3.10 or newer. The helpers use only the standard library.
-- An API key for `https://text-analysis-api.estr.in` (docs: `https://text-analysis-api.estr.in/swagger-ui/`). The key is only needed to build the profile, not to use the skill.
+- An API key for the text analysis API (see below). The key is only needed to build the profile, not to use the skill.
 
 On Windows, run Python as `python`. `python3` on Windows is usually a Microsoft Store shortcut, not real Python.
+
+## Text analysis API
+
+The profile is measured by a text analysis API:
+
+- API: https://text-analysis-api.estr.in/
+- Docs: https://text-analysis-api.estr.in/swagger-ui/
+
+Every request needs your key in an `X-API-Key` header. `build-profile.py` already points at this API, so you only have to supply the key (step 5 below). You never call the API by hand.
 
 ## Install the skill
 
@@ -83,7 +92,7 @@ $env:TEXT_ANALYSIS_API_KEY = "<your key>"
 python profile\build-profile.py --samples samples --reference reference --author "Your Name" --from you@example.com --cutoff 2022-09-01 -o voice-profile.json
 ```
 
-Leave out `--reference reference` if you skipped it in step 3.
+The key goes in `TEXT_ANALYSIS_API_KEY` for this PowerShell window only; it is not saved anywhere. On macOS or Linux use `export TEXT_ANALYSIS_API_KEY=...`. Leave out `--reference reference` if you skipped it in step 3.
 
 **6. Write the voice file with Claude.**
 
