@@ -81,7 +81,7 @@ Leave out `--reference reference` if the reference set is off. It sends the kept
    - **The voice in one paragraph.**
    - **Core traits:** 4 to 7 bullets, each with a short real example.
    - **Sentences:** length and variety, fragments, questions, typical openers.
-   - **Word choice and signature phrases:** grouped by use (openers, structuring topics, stance and hedging, offers and warmth, closings, informal color). Use `fingerprint.distinctive_phrases` and `first_person_patterns`, but only list a phrase you actually see used that way in the samples. Include the rule "Use these naturally. Do not stack them."
+   - **Word choice and signature phrases:** grouped by use (openers, structuring topics, stance and hedging, offers and warmth, closings, informal color). Use `fingerprint.distinctive_phrases` and `first_person_patterns`, but only list a phrase you actually see used that way in the samples. Include the rule "Use these naturally. Do not stack them." The one or two phrases that mark the voice most strongly are the ones a rewrite will overuse, so mark each of them "once per email at most", and name any close stand-in it must not swap in instead (for example "Regarding" for "With regards to").
    - **Punctuation and formatting habits:** parentheses, quotes, dashes, exclamation points, lists, contractions, greetings and sign-offs.
    - **Paragraphs and structure:** paragraph length and the usual shape of an email from start to finish.
    - **Pronouns:** when they write "I" and when "we".

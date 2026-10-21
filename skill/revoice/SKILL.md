@@ -92,6 +92,7 @@ Follow the voice profile as the authority on how the text should sound. Rules:
   - The template's instructional placeholder text (e.g. "The actual message. Paste...") is replaced, not kept.
 - **Apply the profile's "Do not" list and pronoun rules strictly.**
 - **Markdown output:** one paragraph per line. Never hard-wrap prose.
+- **Final grammar pass.** Reread the rewrite once and fix grammar, spelling, and punctuation errors only. Do not change word choice, sentence length, or tone. Fragments the voice uses on purpose (e.g. "Thoughts?"), contractions, and its casual words are style, not errors.
 - If something in the input is ambiguous enough that a rewrite would have to guess (for example, who "we" refers to), make the safest choice and list it under "Notes" after the output. Keep notes to 3 bullets max, and skip the section if there is nothing to note.
 
 ## Step 5: Output
