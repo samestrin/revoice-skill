@@ -1,0 +1,56 @@
+name: CI
+
+# `pull_request`, never `pull_request_target`: fork PRs run with a read-only
+# token and no secrets.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    # GitHub-hosted: the repo is going public, so CI never uses the
+    # self-hosted gauntlet runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # A tracked file that .gitignore would ignore (an mbox, a sample, a
+      # voice file). The `!` exceptions in .gitignore apply by themselves.
+      - name: Personal-data guard
+        run: |
+          leaked="$(git ls-files -ci --exclude-standard)"
+          if [ -n "$leaked" ]; then
+            echo "::error::Tracked files match .gitignore (personal data?):"
+            echo "$leaked"
+            exit 1
+          fi
+
+      # No PyYAML installed: the tests and --help must work without it.
+      - name: Unit tests
+        run: python3 -m unittest discover -v skill/revoice/tests
+
+      - name: Helper --help
+        run: |
+          for helper in skill/revoice/build/*.py skill/revoice/sync.py; do
+            echo "== $helper --help"
+            python3 "$helper" --help > /dev/null
+          done
