@@ -10,5 +10,6 @@ voice/
 api-key
 skill/revoice/assets/*.md
 !skill/revoice/assets/README.md
+!skill/revoice/assets/example.md
 __pycache__/
 .DS_Store
