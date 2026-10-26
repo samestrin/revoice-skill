@@ -9,16 +9,16 @@ assets/<slug>.md) and, for each name in `audiences`, the overlay note
 "<sb_source minus .md> (<audience>).md" -> assets/<slug>-<audience>.md.
 A missing overlay is skipped. A missing base is an error for that voice.
 
-Usage: sync.py [slug]
+The config is ~/.config/revoice/config.yaml. Reading it needs PyYAML
+(pip install pyyaml); --help does not.
 """
 
+import argparse
 import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-
-import yaml
 
 CONFIG = os.path.expanduser("~/.config/revoice/config.yaml")
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -44,6 +44,19 @@ def write(path: str, data: bytes) -> None:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("slug", nargs="?", help="sync only this voice (default: every voice in the config)")
+    args = ap.parse_args()
+
+    # Imported here so --help works without PyYAML; only --sync needs it.
+    try:
+        import yaml
+    except ImportError:
+        print("error: sync needs PyYAML: pip install pyyaml", file=sys.stderr)
+        return 1
+    if not os.path.isfile(CONFIG):
+        print(f"error: no config at {CONFIG} (copy config.example.yaml there)", file=sys.stderr)
+        return 1
     with open(CONFIG) as f:
         cfg = yaml.safe_load(f)
     sb_url = cfg.get("sb_url")
@@ -52,7 +65,7 @@ def main() -> int:
         return 1
     voices = cfg.get("voices") or {}
     audiences = cfg.get("audiences") or []
-    only = sys.argv[1] if len(sys.argv) > 1 else None
+    only = args.slug
     if only and only not in voices:
         print(f"error: voice '{only}' is not in config", file=sys.stderr)
         return 1
