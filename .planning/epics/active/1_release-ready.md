@@ -35,11 +35,11 @@ Someone who is not Sam can install revoice, build a voice profile from their own
 
 ## Tasks (canonical)
 
-- **T1** — Add `unittest` tests (standard library, to match the helpers) in `skill/revoice/tests/`, with small synthetic fixtures only (a hand-made `.mbox` with fictional people; never real email). Cover: the date cut-off in `mbox-filter-before.py`; quoted-reply and signature stripping and the `--others` reference set in `extract-samples.py`; the request body and error handling of `build-profile.py` with the HTTP call stubbed (no network in tests); `sync.py` argument handling without SilverBullet. The helper file names contain hyphens, so tests load them with `importlib` or run them as subprocesses · `skill/revoice/tests/` · depends: none · success: `python3 -m unittest discover skill/revoice/tests` passes on Python 3.10 and newer
+- **T1** — Add `unittest` tests (standard library, to match the helpers) in `skill/revoice/tests/`, with small synthetic fixtures only (a hand-made `.mbox` with fictional people; never real email). Cover: the date cut-off in `mbox-filter-before.py`; quoted-reply and signature stripping and the `--others` reference set in `extract-samples.py`; the request body and error handling of `build-profile.py` with the HTTP call stubbed (no network in tests); `sync.py` argument handling without SilverBullet. Make `sync.py` import `yaml` lazily (inside `main()` after argument parsing) and give it an argparse `--help` that exits 0 without reading the config; tests stub `yaml`. The helper file names contain hyphens, so tests load them with `importlib` or run them as subprocesses · `skill/revoice/tests/`, `skill/revoice/sync.py` · depends: none · success: `python3 -m unittest discover skill/revoice/tests` passes on Python 3.10 and newer without PyYAML installed, and `python3 skill/revoice/sync.py --help` exits 0
 - **T2** — Add `.github/workflows/ci.yml` with `runs-on: [self-hosted, gauntlet]` (the private-repo runner; see `/workspace/dog-trainer-web/.github/workflows/ci.yml`). Steps: run the T1 tests; `python3 <helper> --help` for each helper; a personal-data guard that fails when `git ls-files -ci --exclude-standard` prints anything (a tracked file that `.gitignore` would ignore, so the `!` exceptions in `.gitignore` apply by themselves) · `.github/workflows/ci.yml` · depends: T1 · success: CI runs on every PR to `main` and fails on a planted voice file
 - **T3** — Add `LICENSE` (owner picks, open question 2), `CHANGELOG.md` with the first entry, and the version (`0.1.0` unless the owner says otherwise) as `metadata: {version: ...}` in the `skill/revoice/SKILL.md` front matter (Claude Code has no `version` field and ignores unknown ones, but `metadata` is a free-form map it accepts) with the same number in the `CHANGELOG.md` heading · `LICENSE`, `CHANGELOG.md`, `skill/revoice/SKILL.md`, `README.md` · depends: none · success: a `v0.1.0` tag can be cut from `main` and the `SKILL.md` version equals the `CHANGELOG.md` heading
 - **T4** — Decide how users install: copy the folder as today, or a Claude Code plugin (open question 3). Whichever is chosen, one documented install command and one upgrade command, on Windows and macOS/Linux · `README.md` · depends: T3 · success: (manual) a clean machine installs from the README and the `revoice` skill runs. Trigger: the owner, on a machine or user account that has no `~/.claude/skills/revoice`, runs only the README install command, starts a new Claude Code session and runs `/revoice Thanks for the quick reply`; a rewrite appears. Cleanup: delete the installed folder.
-- **T5** — Add a README section on how a new user gets a text analysis API key (open question 4), what leaves the machine (only the chosen samples), and how to delete the work folder · `README.md` · depends: T4 · success: the README answers "where do I get a key" and "what is sent" without outside help
+- **T5** — Add a README section on how a new user gets a text analysis API key: sign up at yourvoice.dev (250 free credits on sign-up), buy a pack if needed, create a key on the dashboard, save it to `~/.config/revoice/api-key`; it is used only by `--build` against `https://text-analysis-api.estr.in/`. Also fix the README line "The helpers use only the standard library" (only `--sync` needs PyYAML: `pip install pyyaml`), and say what leaves the machine (only the chosen samples), and how to delete the work folder · `README.md` · depends: T4 · success: the README answers "where do I get a key" and "what is sent" without outside help
 - **T6** — Add `skill/revoice/assets/example.md`: a fictional person's voice file in the real format (see `skill/revoice/build.md`), so a new user sees what `--build` produces and can try `/revoice --voice=example` before building their own. Add `!skill/revoice/assets/example.md` to `.gitignore` (the T2 guard follows `.gitignore`, so it needs no edit) · `skill/revoice/assets/example.md`, `.gitignore` · depends: T2 · success: (manual) `/revoice --voice=example` works on a fresh install. Trigger: the owner, after the T4 install, runs `/revoice --voice=example Thanks for the quick reply` and a rewrite appears; and CI stays green with `example.md` tracked.
 
 ## Open questions for the owner
@@ -47,7 +47,7 @@ Someone who is not Sam can install revoice, build a voice profile from their own
 1. **Public or private release?** Release ready can stay private. If it goes public, CI on a self-hosted runner needs a rule that PRs from forks never run on gauntlet.
 2. **License:** MIT, Apache-2.0, or proprietary/all rights reserved?
 3. **Install:** keep "copy the folder", or package as a Claude Code plugin?
-4. **API key:** is yourvoice.dev (the text analysis portal) where a new user gets a key and credits, or is the API key handed out another way?
+4. ~~**API key**~~ Answered in the 2026-10-26 refinement: yourvoice.dev (EST-2794; portal README, epic 54 plan, live HTTPS check).
 5. **Version:** start at `0.1.0`?
 
 ## Out of scope
@@ -83,5 +83,24 @@ Someone who is not Sam can install revoice, build a voice profile from their own
 - Tasks: 6 (limit 7). Components: 3 (limit 3): `skill/revoice/`, `.github/`, root
 - Claims checked: 22 (line counts of 10 files, `.gitignore` list, helper `--help`, stdlib-only, flag list, config path, API URL and key file, README claims, skills docs, plugin docs, GitHub self-hosted runner guidance, gauntlet `runs-on` in sibling repos). Discovery searches: `rg yaml|import`, `rg timeout|urlopen`, `rg --help`, `git ls-files`, sibling `ci.yml`
 - Failure modes: Who can call it: CI runs on a self-hosted runner, so fork PRs are the risk if public (GitHub docs: self-hosted runners "should almost never be used for public repositories"); handled in question 1. Slow or down: `build-profile.py` sets timeouts (600 s, 30 s). What leaves: only chosen samples; guard added in T2. Every form of input: guard uses git's own ignore rules, not a copy of the patterns.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-26, second pass)
+### Auto-applied corrections (2)
+1. Open question 4 answered by EST-2794 (auto-apply): a new user gets a key at yourvoice.dev (`text-analysis-portal` README lines 1-3, its epic 54 plan, `https://yourvoice.dev` returns 200). T5 now says so.
+2. Finding 6 (`sync.py` needs PyYAML and has no `--help`) settled by EST-2794 (auto-apply): T1 makes the `yaml` import lazy and adds argparse `--help`; T5 corrects the README "standard library only" line and scopes PyYAML to `--sync` (`skill/revoice/SKILL.md:109` already says it needs PyYAML). T1's success now also requires no PyYAML installed.
+### Items needing user confirmation (4)
+1. Public or private release (recommended: private).
+2. License (recommended: MIT).
+3. Install method (recommended: keep copying the folder).
+5. Starting version (recommended: 0.1.0).
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at bc8726e. Plan written: 2026-10-26. Commits reviewed since: 0
+- Tasks: 6 (limit 7). Components: 3 (limit 3)
+- Claims checked: 4 (answers in EST-2794 re-verified against `sync.py:21` and `SKILL.md:109`). Discovery searches: none new
+- Failure modes: unchanged from the first report; if question 1 is answered "public", T2 must add the fork guard.
 - Vision fit: no VISION.md
 <!-- refine-epic:end -->
