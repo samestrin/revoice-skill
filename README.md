@@ -33,19 +33,52 @@ Every request needs your key in an `X-API-Key` header. The build already points 
 
 ## 1. Install the skill
 
-PowerShell, from the repository folder:
+You copy the skill folder into Claude Code's skills folder. First get the repository (the same commands work in PowerShell, Terminal and any shell with git):
+
+```bash
+git clone https://github.com/samestrin/revoice-skill.git
+cd revoice-skill
+```
+
+Then, from that folder:
+
+Windows (PowerShell):
 
 ```powershell
+New-Item -ItemType Directory -Force "$HOME\.claude\skills" | Out-Null
 Copy-Item -Recurse skill\revoice "$HOME\.claude\skills\revoice"
 ```
 
 macOS or Linux:
 
 ```bash
+mkdir -p ~/.claude/skills
 cp -R skill/revoice ~/.claude/skills/revoice
 ```
 
 Start a new Claude Code session so it picks up the skill. The first `/revoice --build` creates your config at `~/.config/revoice/config.yaml`.
+
+## Upgrading
+
+From the cloned repository folder, pull the latest version and copy the skill's files over the installed copy:
+
+Windows (PowerShell):
+
+```powershell
+git pull
+Copy-Item -Recurse -Force skill\revoice\* "$HOME\.claude\skills\revoice\"
+```
+
+macOS or Linux:
+
+```bash
+git pull
+cp -R skill/revoice/. ~/.claude/skills/revoice/
+```
+
+This overwrites the skill's files and keeps everything that is yours: your voice files in `assets/`, and your config and API key under `~/.config/revoice/`. Start a new Claude Code session to pick up the new version.
+
+To uninstall, delete the `revoice` folder from `~/.claude/skills/` (and `~/.config/revoice/` if you also want to remove your config and API key).
 
 ## 2. Save your API key
 
