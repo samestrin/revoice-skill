@@ -1,0 +1,68 @@
+From alex@example.com Mon Aug 15 09:00:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: Garden plans
+Date: Mon, 15 Aug 2022 09:00:00 +0000
+
+Hi Jordan,
+
+The tomato beds are ready and I moved the herbs to the sunny corner.
+
+Talk soon,
+Alex
+
+From alex@example.com Wed Aug 31 23:30:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: Re: Late summer
+Date: Wed, 31 Aug 2022 23:30:00 +0000
+
+Last message before the cut-off, half an hour early.
+
+From alex@example.com Thu Sep  1 00:00:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: Exactly at the cut-off
+Date: Thu, 01 Sep 2022 00:00:00 +0000
+
+This one is dated exactly at midnight UTC on the cut-off day.
+
+From alex@example.com Wed Aug 31 22:00:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: Timezone edge
+Date: Wed, 31 Aug 2022 22:00:00 -0300
+
+Local time is before midnight, but in UTC it is 01:00 on the cut-off day.
+
+From alex@example.com Fri Oct 14 10:00:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: Autumn
+Date: Fri, 14 Oct 2022 10:00:00 +0000
+
+Well after the cut-off.
+
+From alex@example.com Sat Jan  1 00:00:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: No date header
+
+This message has no Date header at all.
+
+From alex@example.com Sat Jan  1 00:00:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: Garbled date
+Date: not a real date
+
+This message has a Date header that cannot be parsed.
+
+From alex@example.com Sat Jan  1 00:00:00 2022
+From: Alex Rivera <alex@example.com>
+To: Jordan Lee <jordan@example.org>
+Subject: Naive date
+Date: Tue, 30 Aug 2022 12:00:00
+
+This message has a date with no time zone, so it is read as UTC.
+

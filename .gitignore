@@ -1,5 +1,7 @@
 # Personal data: never commit email, samples, or profiles
 *.mbox
+# Synthetic test mailboxes (fictional people only)
+!skill/revoice/tests/fixtures/*.mbox
 samples/
 reference/
 voice-profile.json
@@ -8,5 +10,6 @@ voice/
 api-key
 skill/revoice/assets/*.md
 !skill/revoice/assets/README.md
+!skill/revoice/assets/example.md
 __pycache__/
 .DS_Store
