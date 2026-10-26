@@ -16,7 +16,7 @@ Someone who is not Sam can install revoice, build a voice profile from their own
 
 ## Current State
 
-- Private repo `samestrin/revoice-skill`, branch `main` at 1943825 (2026-10-21). No CI, no tests, no license, no version, no `.planning/` before this plan.
+- Private repo `samestrin/revoice-skill`, branch `main` at bc8726e (2026-10-26; the only commit after the last code commit 1943825 of 2026-10-21 adds this plan). No CI, no tests, no license, no version, no `.planning/` before this plan.
 - `skill/revoice/SKILL.md` (111 lines): the rewrite skill, `--voice`, `--audience`, `--template`, `--output-path`, `--sync` (SilverBullet, optional), `--build`.
 - `skill/revoice/build.md` (110 lines): the `--build` walkthrough that turns a sent-mail `.mbox` into a voice file.
 - Helpers, standard library only: `build/mbox-filter-before.py` (72 lines), `build/extract-samples.py` (219), `build/build-profile.py` (178), `sync.py` (86). Each has `--help`. None has a test.
@@ -33,14 +33,14 @@ Someone who is not Sam can install revoice, build a voice profile from their own
 - No license, version or changelog, so there is nothing to call a release.
 - The README assumes the reader already has an API key.
 
-## Tasks (proposed; the refine turns these into canonical tasks)
+## Tasks (canonical)
 
-- **T1 — Tests for the helpers.** `unittest` (standard library, to match the helpers) in `skill/revoice/tests/`, with small synthetic fixtures only (a hand-made `.mbox` with fictional people; never real email). Cover: the date cut-off in `mbox-filter-before.py`; quoted-reply and signature stripping and the `--others` reference set in `extract-samples.py`; the request body and error handling of `build-profile.py` with the HTTP call stubbed (no network in tests); `sync.py` argument handling without SilverBullet. Success: `python3 -m unittest discover skill/revoice/tests` passes on Python 3.10 and newer.
-- **T2 — CI on gauntlet.** `.github/workflows/ci.yml` with `runs-on: [self-hosted, gauntlet]` (the private-repo runner; see the other private repos). Steps: run the T1 tests; `python3 <helper> --help` for each helper; a personal-data guard that fails if a tracked file matches the `.gitignore` personal-data patterns, or if any `skill/revoice/assets/*.md` other than `README.md` is tracked. Success: CI runs on every PR to `main` and fails on a planted voice file.
-- **T3 — License, version, changelog.** `LICENSE` (owner picks, open question 2), a version (`0.1.0` unless the owner says otherwise) in one place that the README and `SKILL.md` front matter agree on, and `CHANGELOG.md` with the first entry. Success: a `v0.1.0` tag can be cut from `main`.
-- **T4 — Packaging and install.** Decide how users install: copy the folder as today, or a Claude Code plugin (open question 3). Whichever is chosen, one documented install command and one upgrade command, on Windows and macOS/Linux. Success: a clean machine installs from the README and `/revoice --help`-style usage works.
-- **T5 — Getting an API key and privacy notes.** README section on how a new user gets a text analysis API key (open question 4), what leaves the machine (only the chosen samples), and how to delete the work folder. Success: the README answers "where do I get a key" and "what is sent" without outside help.
-- **T6 — Example voice file.** `skill/revoice/assets/example.md`: a fictional person's voice file in the real format, so a new user sees what `--build` produces and can try `/revoice --voice=example` before building their own. Add it as an explicit exception in `.gitignore` and the T2 guard. Success: `/revoice --voice=example` works on a fresh install.
+- **T1** — Add `unittest` tests (standard library, to match the helpers) in `skill/revoice/tests/`, with small synthetic fixtures only (a hand-made `.mbox` with fictional people; never real email). Cover: the date cut-off in `mbox-filter-before.py`; quoted-reply and signature stripping and the `--others` reference set in `extract-samples.py`; the request body and error handling of `build-profile.py` with the HTTP call stubbed (no network in tests); `sync.py` argument handling without SilverBullet. The helper file names contain hyphens, so tests load them with `importlib` or run them as subprocesses · `skill/revoice/tests/` · depends: none · success: `python3 -m unittest discover skill/revoice/tests` passes on Python 3.10 and newer
+- **T2** — Add `.github/workflows/ci.yml` with `runs-on: [self-hosted, gauntlet]` (the private-repo runner; see `/workspace/dog-trainer-web/.github/workflows/ci.yml`). Steps: run the T1 tests; `python3 <helper> --help` for each helper; a personal-data guard that fails when `git ls-files -ci --exclude-standard` prints anything (a tracked file that `.gitignore` would ignore, so the `!` exceptions in `.gitignore` apply by themselves) · `.github/workflows/ci.yml` · depends: T1 · success: CI runs on every PR to `main` and fails on a planted voice file
+- **T3** — Add `LICENSE` (owner picks, open question 2), `CHANGELOG.md` with the first entry, and the version (`0.1.0` unless the owner says otherwise) as `metadata: {version: ...}` in the `skill/revoice/SKILL.md` front matter (Claude Code has no `version` field and ignores unknown ones, but `metadata` is a free-form map it accepts) with the same number in the `CHANGELOG.md` heading · `LICENSE`, `CHANGELOG.md`, `skill/revoice/SKILL.md`, `README.md` · depends: none · success: a `v0.1.0` tag can be cut from `main` and the `SKILL.md` version equals the `CHANGELOG.md` heading
+- **T4** — Decide how users install: copy the folder as today, or a Claude Code plugin (open question 3). Whichever is chosen, one documented install command and one upgrade command, on Windows and macOS/Linux · `README.md` · depends: T3 · success: (manual) a clean machine installs from the README and the `revoice` skill runs. Trigger: the owner, on a machine or user account that has no `~/.claude/skills/revoice`, runs only the README install command, starts a new Claude Code session and runs `/revoice Thanks for the quick reply`; a rewrite appears. Cleanup: delete the installed folder.
+- **T5** — Add a README section on how a new user gets a text analysis API key (open question 4), what leaves the machine (only the chosen samples), and how to delete the work folder · `README.md` · depends: T4 · success: the README answers "where do I get a key" and "what is sent" without outside help
+- **T6** — Add `skill/revoice/assets/example.md`: a fictional person's voice file in the real format (see `skill/revoice/build.md`), so a new user sees what `--build` produces and can try `/revoice --voice=example` before building their own. Add `!skill/revoice/assets/example.md` to `.gitignore` (the T2 guard follows `.gitignore`, so it needs no edit) · `skill/revoice/assets/example.md`, `.gitignore` · depends: T2 · success: (manual) `/revoice --voice=example` works on a fresh install. Trigger: the owner, after the T4 install, runs `/revoice --voice=example Thanks for the quick reply` and a rewrite appears; and CI stays green with `example.md` tracked.
 
 ## Open questions for the owner
 
@@ -55,3 +55,33 @@ Someone who is not Sam can install revoice, build a voice profile from their own
 - Changing how the rewrite sounds. Voice quality is the owner's judgment, not a task.
 - Any real voice profile or real email in the repo, ever.
 - Syncing Sam's installed copy; that happens after the release, from this repo.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-26)
+### Auto-applied corrections (5)
+1. Current State named `main` at 1943825; `main` is bc8726e (plan-only commit; code unchanged since 1943825). Evidence: `git log`.
+2. `## Tasks (canonical)` written from the proposed tasks, with `depends:` on every task. Edges: T2→T1 (CI runs T1's tests); T4→T3 (both edit `README.md`, T3 owns `SKILL.md` front matter); T5→T4 (both edit `README.md`); T6→T2 (its success needs CI green with `example.md` tracked). T1 and T3 need nothing.
+3. T3: version moved to `metadata.version` in `SKILL.md`. The Claude Code skills docs list no `version` field and say unknown fields are ignored; `metadata` is a free-form map. "One place that README and SKILL.md agree on" was self-contradictory, so the version now lives in `SKILL.md` and the `CHANGELOG.md` heading.
+4. T2/T6: guard is `git ls-files -ci --exclude-standard` (tested in a scratch repo: lists a tracked file matching an ignore pattern, skips a `!` exception). It covers every `.gitignore` pattern in any folder, and T6 no longer edits the guard (the plan said it would, which would have made T6 edit `ci.yml` too).
+5. T4/T6 `(manual)` criteria got `Trigger:` steps. T4's "`/revoice --help`-style usage" referred to a flag `SKILL.md` does not have (its flags are `--voice`, `--audience`, `--template`, `--output-path`, `--sync`, `--build`); it now says a rewrite runs.
+### Items needing user confirmation (6)
+1. Public or private release (open question 1).
+2. License (open question 2).
+3. Install method (open question 3). A plugin needs `.claude-plugin/plugin.json` and `skills/<name>/SKILL.md` at the plugin root, which moves `skill/revoice/`, adds a fourth component (limit 3), and namespaces the command as `/<plugin>:<skill>`.
+4. API key source (open question 4).
+5. Starting version (open question 5).
+6. `sync.py` is not standard library only: `import yaml` (PyYAML) at `skill/revoice/sync.py:21`, and it has no `--help` (running it with `--help` reads the config and crashes). The plan and README say "standard library only" and "each has `--help`"; T1 would fail to import it on a clean runner and T2's `--help` step would fail.
+### Advisory observations (6)
+- No VISION.md in this repo.
+- T1 criterion "Python 3.10 and newer": CI runs on gauntlet's one Python, so only that version is proven.
+- `skill/revoice/tests/` is copied to users by the `cp -R skill/revoice` install. Harmless (synthetic fixtures), and putting tests at top level would add a fourth component.
+- Windows install (T4) cannot be proven in CI; it is a manual criterion with a trigger.
+- `build-profile.py` also reads the key from `--api-key` and `TEXT_ANALYSIS_API_KEY`; the README only documents the key file (a key on the command line shows in the process list). T5 can mention it.
+- The helper file names have hyphens, so tests cannot `import` them directly (noted in T1).
+### Verification context
+- Code repo: revoice-skill at bc8726e. Plan written: 2026-10-26. Commits reviewed since: 0
+- Tasks: 6 (limit 7). Components: 3 (limit 3): `skill/revoice/`, `.github/`, root
+- Claims checked: 22 (line counts of 10 files, `.gitignore` list, helper `--help`, stdlib-only, flag list, config path, API URL and key file, README claims, skills docs, plugin docs, GitHub self-hosted runner guidance, gauntlet `runs-on` in sibling repos). Discovery searches: `rg yaml|import`, `rg timeout|urlopen`, `rg --help`, `git ls-files`, sibling `ci.yml`
+- Failure modes: Who can call it: CI runs on a self-hosted runner, so fork PRs are the risk if public (GitHub docs: self-hosted runners "should almost never be used for public repositories"); handled in question 1. Slow or down: `build-profile.py` sets timeouts (600 s, 30 s). What leaves: only chosen samples; guard added in T2. Every form of input: guard uses git's own ignore rules, not a copy of the patterns.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
