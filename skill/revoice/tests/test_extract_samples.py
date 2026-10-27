@@ -99,6 +99,15 @@ class ExtractRunTest(unittest.TestCase):
         texts, _ = self.extract("--min-words", "14")
         self.assertEqual(sorted(texts), ["Bike ride", "Garden plans"])
 
+    def test_max_samples_keeps_the_longest(self):
+        texts, stdout = self.extract("--max-samples", "2")
+        self.assertEqual(sorted(texts), ["Bike ride", "Garden plans"])
+        self.assertRegex(stdout, r"over the cap\s+: 2\b")
+
+    def test_max_samples_zero_means_no_cap(self):
+        texts, _ = self.extract("--max-samples", "0")
+        self.assertEqual(len(texts), 4)
+
 
 if __name__ == "__main__":
     unittest.main()
