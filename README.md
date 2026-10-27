@@ -32,7 +32,7 @@ Getting started is three steps: install the skill, save your API key, and run `/
 
 Only `--build` uses the key, and only to call `https://text-analysis-api.estr.in/`. Using `/revoice` to rewrite text never touches the API.
 
-The sample review costs 1 credit per request, one request per batch of up to 100 samples — 2 credits for a full 200-sample mailbox. Building the profile charges per text sent, and the 250 free credits cover a typical build.
+Building the profile charges credits per text sent; the API's docs at https://text-analysis-api.estr.in/ say what each request costs. The 250 free credits cover a typical build.
 
 ## Text analysis API
 
@@ -137,7 +137,7 @@ You can also give the answers up front:
 
 Read the voice file it wrote (`assets/<your-slug>.md` in the skill folder) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
-**What leaves your machine.** The full mailbox never does. The build pulls out up to 200 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The text analysis API gets, over HTTPS: every extracted sample for the KEEP/DROP review — including the ones it drops — then the kept samples again to measure your style, plus the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The review runs on rules inside the API itself; no outside engine or company sees your email. The reference set is on by default; answer no to it in the build questions to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. If the API review fails and you say yes to the offered Claude review instead, Claude reads every extracted sample, and they go to your Claude model provider. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
+**What leaves your machine.** The full mailbox never does. The build pulls out up to 200 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The text analysis API gets, over HTTPS: every extracted sample for the KEEP/DROP review — including the ones it drops — then the kept samples again to measure your style, plus the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The review runs in the text analysis API; its docs at https://text-analysis-api.estr.in/ say which engine runs it. The reference set is on by default; answer no to it in the build questions to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. If the API review fails and you say yes to the offered Claude review instead, Claude reads every extracted sample, and they go to your Claude model provider. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
 
 Windows (PowerShell): `Remove-Item -Recurse -Force "$HOME\revoice-build\<your-slug>"`
 
