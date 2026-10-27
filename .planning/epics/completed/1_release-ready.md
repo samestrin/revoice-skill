@@ -123,3 +123,14 @@ Someone who is not Sam can install revoice, build a voice profile from their own
 - Failure modes: fork PR on a self-hosted runner covered by T2; what leaves: history clean.
 - Vision fit: no VISION.md
 <!-- refine-epic:end -->
+
+## Acceptance Criteria
+
+Recorded from each task's `success:` line (the plan had no criteria section). Checked on `main` at 212d76e.
+
+- [x] T1: `python3 -m unittest discover skill/revoice/tests` passes without PyYAML and `python3 skill/revoice/sync.py --help` exits 0 _(verified 2026-10-27: 51 tests OK locally and in CI on Python 3.10-3.13 at 212d76e; `--help` exits 0 for sync.py and all three build helpers with HOME=/nonexistent; `skill/revoice/sync.py` imports `yaml` inside `main()`)_
+- [x] T2: CI runs on every PR to `main` on Python 3.10 to 3.13, fails on a planted voice file, and `ci.yml` carries `runs-on: ubuntu-latest`, the `pull_request` trigger and `permissions: contents: read` _(verified 2026-10-27: `.github/workflows/ci.yml`; CI run green on 212d76e for 3.10-3.13; planted `assets/me.md` in a scratch repo with the real `.gitignore`: `git ls-files -ci --exclude-standard` prints only `me.md` and skips `example.md`)_
+- [x] T3: a `v0.1.0` tag can be cut from `main` and the `SKILL.md` version equals the `CHANGELOG.md` heading _(verified 2026-10-27: `skill/revoice/SKILL.md` `metadata: version: "0.1.0"`, `CHANGELOG.md` `## [0.1.0] - 2026-10-26`, `LICENSE` is MIT)_
+- [x] T4: (manual) a clean machine installs from the README and the `revoice` skill runs _(verified 2026-10-27: checked by hand by the board in a clean `node:24` container: README install, then `/revoice --voice=example Hello there` loaded the skill and rewrote the text)_
+- [x] T5: the README answers "where do I get a key" and "what is sent" without outside help _(verified 2026-10-27: README.md "Getting an API key" section, the requirements line scoping PyYAML to `--sync`, and the work-folder delete commands)_
+- [x] T6: (manual) `/revoice --voice=example` works on a fresh install, and CI stays green with `example.md` tracked _(verified 2026-10-27: checked by hand by the board in the same clean container: no config, `--voice` given, ran on the example voice and rewrote the text; CI green with `skill/revoice/assets/example.md` tracked)_
