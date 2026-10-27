@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - README "Getting an API key" section: sign up at yourvoice.dev (250 free credits), create a key on the dashboard, save it to `~/.config/revoice/api-key`; notes that only `--build` uses it, that only the chosen samples leave the machine, and gives the work-folder delete commands. The requirements note now says only `--sync` needs PyYAML.
 - `extract-samples.py --max-samples` (default 200, `0` = no cap) keeps the longest samples, so `--build` reads a bounded number of emails on a large mailbox.
 
+### Changed
+
+- `--build` now reviews the extracted samples through the text analysis API (`review-samples.py`, new phase 4) instead of Claude reading every sample; Claude reads only the samples the profile is built from. If the API review fails, an opt-in Claude review is offered as a fallback, with a clear note that the samples then go to Claude's model provider.
+
 ### Fixed
 
 - README now says the extracted samples go to Claude's model provider during `--build` (Claude reads them to pick the best), and that the text analysis API gets the reference set of other senders' emails as well as the chosen samples.
