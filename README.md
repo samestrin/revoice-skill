@@ -26,13 +26,13 @@ Getting started is three steps: install the skill, save your API key, and run `/
 
 ## Getting an API key
 
-1. Sign up at https://yourvoice.dev/ — you get 250 free credits on sign-up, enough to build a voice profile. Buy a credit pack only if you need more.
+1. Sign up at https://yourvoice.dev/ — you get 250 free credits on sign-up. Buy a credit pack only if you need more.
 2. On the dashboard, create an API key.
 3. Save the key to `~/.config/revoice/api-key` (step 2 below shows how).
 
 Only `--build` uses the key, and only to call `https://text-analysis-api.estr.in/`. Using `/revoice` to rewrite text never touches the API.
 
-Building the profile charges credits per text sent; the API's docs at https://text-analysis-api.estr.in/ say what each request costs. The 250 free credits cover a typical build.
+Building the profile charges credits per text sent; the API's docs at https://text-analysis-api.estr.in/ say what each request costs.
 
 ## Text analysis API
 

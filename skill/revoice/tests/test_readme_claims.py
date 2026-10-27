@@ -19,6 +19,10 @@ class TestReadmeClaims(unittest.TestCase):
         self.assertNotIn("no outside engine or company sees your email", self.text)
         self.assertNotIn("rules inside the API itself", self.text)
 
+    def test_no_free_credits_cover_build_claim(self):
+        self.assertNotIn("cover a typical build", self.text)
+        self.assertNotIn("enough to build a voice profile", self.text)
+
     def test_points_to_api_docs(self):
         self.assertIn("https://text-analysis-api.estr.in/", self.text)
 
