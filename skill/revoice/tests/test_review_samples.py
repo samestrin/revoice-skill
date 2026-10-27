@@ -114,6 +114,46 @@ class ReviewSamples(unittest.TestCase):
     def test_failure_in_second_batch_leaves_index_unchanged(self):
         self.assert_exit_unchanged(FakeAPI(fail_on=2, status=402), "out of credits")
 
+    def test_mismatched_results_exit_unchanged(self):
+        for name, mangle in [("missing", lambda r: r[:-1]),
+                             ("extra", lambda r: r + [{**r[0], "id": "zzz.md"}]),
+                             ("reversed", lambda r: r[::-1])]:
+            with self.subTest(name):
+                before = self.make(3)
+
+                class Bad(FakeAPI):
+                    def __call__(self, req, timeout=None):
+                        data = json.load(super().__call__(req, timeout))
+                        data["results"] = mangle(data["results"])
+                        return io.BytesIO(json.dumps(data).encode())
+
+                with self.assertRaises(SystemExit) as cm:
+                    self.run_it(Bad())
+                self.assertIn("do not match", str(cm.exception))
+                self.assertEqual((self.dir / "index.csv").read_bytes(), before)
+
+    def test_header_only_index_exits_unchanged(self):
+        (self.dir / "index.csv").write_text("file,date,words,subject\n", encoding="utf-8")
+        before = (self.dir / "index.csv").read_bytes()
+        fake = FakeAPI()
+        with self.assertRaises(SystemExit) as cm:
+            self.run_it(fake)
+        self.assertIn("no samples", str(cm.exception))
+        self.assertEqual(fake.requests, [])
+        self.assertEqual((self.dir / "index.csv").read_bytes(), before)
+
+    def test_key_file_with_bom_is_used(self):
+        self.make(2)
+        keyfile = self.dir / "key.txt"
+        keyfile.write_bytes(b"\xef\xbb\xbffile-key\n")
+        fake = FakeAPI()
+        argv = ["--samples", str(self.dir), "--api", "https://api.test",
+                "--api-key-file", str(keyfile)]
+        with mock.patch.dict("os.environ", {}, clear=True), \
+                mock.patch("urllib.request.urlopen", fake):
+            run_main(rs, *argv)
+        self.assertEqual(fake.requests[0]["headers"]["X-api-key"], "file-key")
+
     def test_no_key_exits(self):
         self.make(1)
         with mock.patch.dict("os.environ", {}, clear=True), self.assertRaises(SystemExit) as cm:
