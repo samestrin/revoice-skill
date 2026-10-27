@@ -14,7 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - `--build` now reviews the extracted samples through the text analysis API (`review-samples.py`, new phase 4) instead of Claude reading every sample; Claude reads only the samples the profile is built from. If the API review fails, an opt-in Claude review is offered as a fallback, with a clear note that the samples then go to Claude's model provider.
-- README updated to match: the "What leaves your machine" paragraph says the API gets every extracted sample for review (including the ones it drops) and that Claude reads only the 15 (`--top`) profile samples; the "How it works" steps, the build walkthrough and the "Running the steps by hand" order now name the API review and `review-samples.py`; and the API key section states the credit cost of a full build.
+- README updated to match: the "What leaves your machine" paragraph says the API gets every extracted sample for review (including the ones it drops) and that Claude reads only the 15 (`--top`) profile samples; the "How it works" steps, the build walkthrough and the "Running the steps by hand" order now name the API review and `review-samples.py`; and the API key section says a build charges credits per text sent. The README no longer states the review engine, the per-request credit cost, or that the 250 free credits cover a build — those are undecided in the API — and points to the API's docs for cost instead.
 
 ### Fixed
 
