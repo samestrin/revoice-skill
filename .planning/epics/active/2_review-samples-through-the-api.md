@@ -21,9 +21,9 @@
 
 ## Tasks (canonical)
 
-- **T1** — Add `build/review-samples.py` (standard library only, like the other helpers): read `samples/index.csv`, post the samples to `/analyze/sample-review` in batches of at most 100, and write `verdict,score,reason` into `index.csv`, keeping existing columns and rows (write to a temp file in the same folder and rename it over `index.csv` only after every batch succeeded). Reuse `build-profile.py`'s key lookup and API base. Give each request a 60 s timeout (the API's metered limit is 25 s). Clear exits for 401 (wrong key), 402 (out of credits) and a timeout or 5xx (say the API is down, write nothing). Add `tests/test_review_samples.py` with the HTTP call stubbed (no network) · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: none · success: tests cover a 150-sample batch split, the columns written in order, and each error exit leaving `index.csv` unchanged; `python3 skill/revoice/build/review-samples.py --help` exits 0
+- **T1** — Add `build/review-samples.py` (standard library only, like the other helpers): read `samples/index.csv`, post the samples to `/analyze/sample-review` in batches of at most 100, and write `verdict,score,reason` into `index.csv`, keeping existing columns and rows (write to a temp file in the same folder and rename it over `index.csv` only after every batch succeeded). Copy the key lookup and the `--api` / `--api-key` / `--api-key-file` flags from `build-profile.py:90-103` into `review-samples.py`; do not edit `build-profile.py`. Give each request a 60 s timeout (the API's metered limit is 25 s). Clear exits for 401 (wrong key), 402 (out of credits) and a timeout or 5xx (say the API is down, write nothing). Add `tests/test_review_samples.py` with the HTTP call stubbed (no network) · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: none · success: tests cover a 150-sample batch split, the columns written in order, and each error exit leaving `index.csv` unchanged; `python3 skill/revoice/build/review-samples.py --help` exits 0
 - **T2** — Rewrite phase 3 of `build.md` to run `review-samples.py` and report KEEP vs DROP counts and the top drop reasons from the CSV, without reading the samples. Keep the "fewer than 15 KEEP" warning. Phase 4 (the key check) moves before phase 3, since phase 3 now needs the key; renumber the phases, and update the phase 5 line that sends the user back to "phase 4", the phase 0 helper list (add `review-samples.py`) and the rules line that names `build-profile.py` as the only helper that sends samples. After PR #11 merges, reword its phase 2 sentence that says extraction is capped "because you read every one in phase 3". If the API review fails, follow open question 1 · `skill/revoice/build.md` · depends: T1 · success: (manual) the owner runs `/revoice --build` on a test export and the transcript shows no sample text read before phase 6. Trigger: owner, after epic 66 is deployed.
-- **T3** — README: the "What leaves your machine" paragraph says samples go to the text analysis API for review and building, and that Claude reads only the samples the profile is built from (at most 100) to write the voice file; the "Running the steps by hand" order adds `review-samples.py`; a credits line per epic 66's price; the "How it works" step 2 ("has Claude pick the ones that really sound like you") and the build walkthrough ("reviewing") reworded to match; and, because review sends every extracted sample (including the ones it drops), the paragraph says that, and names any outside engine epic 66 adds. CHANGELOG Unreleased entry · `README.md`, `CHANGELOG.md` · depends: T2 · success: the README matches what `build.md` does, step by step, and no README line still says Claude picks the samples
+- **T3** — README: the "What leaves your machine" paragraph says samples go to the text analysis API for review and building, and that Claude reads only the samples the profile is built from (15 by default, `--top`) to write the voice file; the "Running the steps by hand" order adds `review-samples.py`; a credits line per epic 66's price; the "How it works" step 2 ("has Claude pick the ones that really sound like you") and the build walkthrough ("reviewing") reworded to match; and, because review sends every extracted sample (including the ones it drops), the paragraph says that, and names any outside engine epic 66 adds. CHANGELOG Unreleased entry · `README.md`, `CHANGELOG.md` · depends: T2 · success: the README matches what `build.md` does, step by step, and no README line still says Claude picks the samples
 
 ## Open Questions
 
@@ -57,5 +57,20 @@
 - Tasks: 3 (limit 7). Components: 2 (limit 3): `skill/revoice/`, root (`README.md`, `CHANGELOG.md`)
 - Claims checked: 9 (MAX_DOCS = 100, key lookup order, X-API-Key, `ranked_files` reads verdict/score, CI `--help` glob over `build/*.py`, phase 3/4 text, README privacy text, PR #11 contents, epic 66 contract). Discovery searches: `index.csv`, `verdict`, `phase [0-9]`, `Claude`, `MAX_DOCS|urlopen`
 - Failure modes: caller (key via X-API-Key, 401/402 handled in T1); slow or down (timeout added); stops halfway (temp file and rename added; double charge noted); what leaves (all extracted samples now go to the API; README line added); input forms (CSV quoting: `csv` module, not string split). No write route or login is added.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-27, answers from EST-3026)
+### Auto-applied corrections (2)
+1. T1: copy the key lookup and the three API flags instead of "reusing" them; the lookup is inline in `main()` and the script cannot be imported (`build-profile.py:90-103`, `tests/_load.py:3-4`). Answer Q3, EST-3026.
+2. T3: Claude reads `--top` samples (default 15), not "at most 100" (`build-profile.py:94,112,154`). Found while answering Q2, EST-3026.
+### Items needing user confirmation (2)
+1. Open question 1: fallback when the API review fails (recommended: b, opt-in Claude fallback; build.md:9 rule must be amended).
+2. Open question 2: address hint (recommended: keep in phase 6, where it sees about 15 samples, not 200).
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at 8bfae93. Tasks: 3 (limit 7). Components: 2 (limit 3).
+- Claims checked: 3 more. Failure modes: see the report above.
 - Vision fit: no VISION.md
 <!-- refine-epic:end -->
