@@ -21,8 +21,16 @@ Getting started is three steps: install the skill, save your API key, and run `/
 ## Requirements
 
 - Claude Code.
-- Python 3.10 or newer. The helpers use only the standard library. On Windows, Python runs as `python`; `python3` there is usually a Microsoft Store shortcut.
+- Python 3.10 or newer. The helpers use only the standard library, except `--sync`, which needs PyYAML (`pip install pyyaml`). On Windows, Python runs as `python`; `python3` there is usually a Microsoft Store shortcut.
 - An API key for the text analysis API. It is only needed to build the profile, not to use the skill.
+
+## Getting an API key
+
+1. Sign up at https://yourvoice.dev/ — you get 250 free credits on sign-up, enough to build a voice profile. Buy a credit pack only if you need more.
+2. On the dashboard, create an API key.
+3. Save the key to `~/.config/revoice/api-key` (step 2 below shows how).
+
+Only `--build` uses the key, and only to call `https://text-analysis-api.estr.in/`. Using `/revoice` to rewrite text never touches the API.
 
 ## Text analysis API
 
@@ -119,7 +127,11 @@ You can also give the answers up front:
 
 Read the voice file it wrote (`assets/<your-slug>.md` in the skill folder) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
-**Your email stays on your machine.** Only the samples chosen for your profile go to the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file.
+**Your email stays on your machine.** Only the samples chosen for your profile leave it, going to the text analysis API over HTTPS. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
+
+Windows (PowerShell): `Remove-Item -Recurse -Force "$HOME\revoice-build\<your-slug>"`
+
+macOS or Linux: `rm -rf ~/revoice-build/<your-slug>`
 
 ## Use the skill
 
