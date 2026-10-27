@@ -135,7 +135,7 @@ You can also give the answers up front:
 
 Read the voice file it wrote (`assets/<your-slug>.md` in the skill folder) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
-**What leaves your machine.** The full mailbox never does. The build pulls out up to 200 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). Claude reads those samples to pick the ones that sound like you, so they go to your Claude model provider like anything else you show Claude. Only the samples Claude picks go to the text analysis API, over HTTPS. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
+**What leaves your machine.** The full mailbox never does. The build pulls out up to 200 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). Claude reads those samples to pick the ones that sound like you, so they go to your Claude model provider like anything else you show Claude. The text analysis API gets, over HTTPS, the samples Claude picks plus the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The reference set is on by default; answer no to it in the build questions to keep other people's email off the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
 
 Windows (PowerShell): `Remove-Item -Recurse -Force "$HOME\revoice-build\<your-slug>"`
 
