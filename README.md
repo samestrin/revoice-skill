@@ -66,6 +66,14 @@ cp -R skill/revoice ~/.claude/skills/revoice
 
 Start a new Claude Code session so it picks up the skill. The first `/revoice --build` creates your config at `~/.config/revoice/config.yaml`.
 
+You can try the skill before building your own voice, with the fictional example voice that ships with it. No config is needed for this:
+
+```
+/revoice --voice=example Thanks for the quick reply
+```
+
+Until you have a config, always pass `--voice`: without it the skill does not know which voice to use and asks you to create the config. Without a config there is no default audience, relative paths are relative to the current folder, and SilverBullet (`sb:` paths and `--sync`) is off.
+
 ## Upgrading
 
 From the cloned repository folder, pull the latest version and copy the skill's files over the installed copy:

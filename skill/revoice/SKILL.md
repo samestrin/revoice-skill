@@ -31,7 +31,10 @@ Config keys:
 
 The SilverBullet keys (`sb_base`, `default_template` when it is an `sb:` ref, `sb_url`, `voices`) are optional. Leave them empty if you do not use SilverBullet.
 
-If the config file is missing, stop and tell the user to create it from `config.example.yaml`. Do not guess defaults.
+If the config file is missing (a fresh install has none until the first `--build` creates it; `--build` itself does not need one):
+- If `--voice` is given, run without it. Treat every key as empty: no default audience (base voice only unless `--audience` is given, which then accepts `casual`, `business` or `formal`), no default template, and relative local paths resolve against the current working directory.
+- If no `--voice` is given, stop and tell the user to create it from `config.example.yaml` (or run `/revoice --build`), or to pass `--voice=<slug>`. Do not guess defaults.
+- If an `sb:` ref or `--sync` is used, stop and tell the user SilverBullet needs the config. Do not fall back to a local path.
 
 If an `sb:` ref is used but the SilverBullet MCP tools are not available, stop and say so. Do not fall back to a local path.
 

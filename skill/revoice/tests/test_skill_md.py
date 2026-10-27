@@ -35,6 +35,9 @@ class MissingConfigTest(unittest.TestCase):
         self.assertRegex(rule, r"no `--voice`.*stop and tell the user to create it from `config.example.yaml`")
         self.assertIn("Do not guess defaults", rule)
 
+    def test_build_mode_does_not_need_config(self):
+        self.assertIn("`--build` itself does not need one", missing_config_rule())
+
     def test_sb_refs_still_stop_without_config(self):
         rule = missing_config_rule()
         self.assertRegex(rule, r"`sb:` ref.*stop")
