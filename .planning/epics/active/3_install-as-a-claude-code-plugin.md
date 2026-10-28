@@ -24,15 +24,15 @@ Copying the folder (today's install, epic 1 T4) stays documented as the second o
 ## Why this is more than packaging
 
 1. **User data lives inside the skill folder today.** Voice profiles are `assets/<slug>.md` next to `SKILL.md`, and `sync.py` writes there (`ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")`). A plugin's folder belongs to Claude Code and is replaced on update, so a user's voice files would be lost. They move to `~/.config/revoice/voices/` (the config and API key already live in `~/.config/revoice/`). `example.md` ships with the plugin and stays inside it.
-2. **The install path is hard-coded.** `SKILL.md` and `build.md` name `~/.claude/skills/revoice/` 13 times, including the `allowed-tools` entry for `sync.py`. Under a plugin those paths are wrong. Use the plugin root variable Claude Code provides for plugin files (check the current docs for its exact name and where it is expanded, including in `allowed-tools`), and fall back to the copy-folder path so both installs work.
+2. **The install path is hard-coded.** `SKILL.md` and `build.md` name `~/.claude/skills/revoice/` 13 times, including the `allowed-tools` entry for `sync.py`. Under a plugin those paths are wrong. Use `${CLAUDE_SKILL_DIR}`, which Claude Code expands to the skill's own folder in the body and in `allowed-tools`, in both the plugin and the copy-folder install (checked on 2.1.306, refine of 2026-10-28), so no fallback is needed.
 3. **The short command keeps working, on one condition.** Plugin skills are namespaced (`/revoice:revoice`), but a plugin skill whose `SKILL.md` has a `name:` field also answers to the bare name when no other command uses it. Tested 2026-10-27 on Claude Code 2.1.311 with `claude -p --plugin-dir`: a plugin and skill both named `zzsame` ran on `/zzsame`; a skill with `name: zzhello` ran on `/zzhello` and `/zzplug:zzhello`; a skill without a `name:` field did not answer to its bare name. `SKILL.md` already has `name: revoice`, so `/revoice` keeps working. The catch: a leftover copy-folder install at `~/.claude/skills/revoice` takes the bare name, so the README tells anyone who switches to remove it after moving their voice files.
 4. **No migration code.** revoice has no users yet (owner, 2026-10-28), so there is no copy-folder install to migrate except the owner's own. The owner moves their voice files by hand once. The plan therefore has no automatic migration task.
 
 ## Tasks (canonical)
 
-- **T1** — Plugin and marketplace manifests per the current Claude Code plugin docs (name `revoice`, version from `CHANGELOG.md`, description, author, license MIT, homepage); move the skill folder only if the plugin layout requires `skills/<name>/` · `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `skill/revoice/` · depends: none · tier: senior · success: `claude plugin validate .` (or the documented equivalent) passes, and the tests still find the skill
+- **T1** — Plugin and marketplace manifests per the current Claude Code plugin docs (name `revoice`, version from `CHANGELOG.md`, description, author, license MIT, homepage); `plugin.json` sets `"skills": "./skill"` so the skill stays at `skill/revoice/` (no move); a stdlib `unittest` parses both manifests and checks required keys, the marketplace entry name and source, and that `plugin.json` version equals the newest released `CHANGELOG.md` heading and `SKILL.md` `metadata.version` · `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `skill/revoice/tests/test_plugin_manifest.py` · depends: none · tier: senior · success: the new test passes in CI, and the builder's local `claude plugin validate . --strict` output is pasted on the PR
 - **T2** — Voices out of the skill folder: `SKILL.md`, `build.md` (phase 6 saves to `SKILL/assets/<slug>.md`, line 92; line 108 names `assets/`) and `sync.py` read and write `~/.config/revoice/voices/`; `example.md` is read from the plugin when no user voice of that name exists · `skill/revoice/SKILL.md`, `skill/revoice/build.md`, `skill/revoice/sync.py`, tests · depends: T1 · tier: senior · success: tests show sync writes only under `~/.config/revoice/voices/` and the example voice still resolves
-- **T3** — Replace every hard-coded `~/.claude/skills/revoice/` with the plugin root variable, with the copy-folder path as fallback, including `allowed-tools` · `skill/revoice/SKILL.md`, `skill/revoice/build.md`, tests · depends: T2 · tier: senior · success: a test fails on any remaining hard-coded install path, and a test fails if `SKILL.md` loses its `name: revoice` field (it keeps the bare `/revoice` command); `test_skill_md.py` still passes
+- **T3** — Replace every hard-coded `~/.claude/skills/revoice/` with `${CLAUDE_SKILL_DIR}` (the skill's own folder in both installs; expanded in the body and in `allowed-tools`), no fallback, including `allowed-tools` · `skill/revoice/SKILL.md`, `skill/revoice/build.md`, tests · depends: T2 · tier: senior · success: a test fails on any remaining hard-coded install path, and a test fails if `SKILL.md` loses its `name: revoice` field (it keeps the bare `/revoice` command); `test_skill_md.py` still passes
 - **T4** — README and CHANGELOG: the two plugin commands as the main install, update and uninstall through `/plugin`, the copy-folder install as the second option, where voices live now (`~/.config/revoice/voices/`), a short note that someone switching from the copy-folder install moves their voice files there and removes `~/.claude/skills/revoice/` (it takes the bare `/revoice` name), and `/revoice` as the command · `README.md`, `CHANGELOG.md` · depends: T3 · tier: junior · success: `test_readme_claims.py` covers the new install section
 - **T5** — Clean-machine check, same as epic 1's T4/T6: in a fresh `node:24` container with Claude Code, run the two commands, then `/revoice --voice=example <text>` (the bare command, not `/revoice:revoice`); then run `/plugin` update and confirm a voice file in `~/.config/revoice/voices/` survives · README (fixes only) · depends: T4 · tier: junior · success: (manual) Trigger: the owner runs both checks and records the output on the card
 
@@ -69,5 +69,21 @@ None. (The command-name question was settled by the 2026-10-27 test above.)
 - Tasks: 5 (limit 7). Components: 3 (limit 3): `.claude-plugin/`, `skill/revoice/`, root.
 - Claims checked: 14. Discovery searches: `claude/skills`, `assets`, `ASSETS`, `CLAUDE_PLUGIN_ROOT` in the installed `claude` binary (also `CLAUDE_SKILL_DIR`, `CLAUDE_PLUGIN_DATA` exist there), CI workflow, test loaders.
 - Failure modes: update stopping halfway (voices live outside the plugin folder, so safe once T2 covers `build.md`); what is published (`.gitignore` keeps voice files out, and must follow any folder move); other forms of input and network routes: none apply, no route, login or money.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-28, answers)
+### Auto-applied corrections (3)
+Source: EST-3181 `answers` document (experiments on claude 2.1.306 plus the docs).
+1. Q1: T1 keeps `skill/revoice/` and sets `"skills": "./skill"` in `plugin.json`; `claude plugin validate` passes and a `--plugin-dir` run loads the skill and answers bare `/revoice`. Tested with `--plugin-dir`, not a marketplace install.
+2. Q2: T3 uses `${CLAUDE_SKILL_DIR}` with no fallback; it expanded in the body and in `allowed-tools` in both install types.
+3. Q3: T1 adds a stdlib manifest test (keys, name, source, version equal across `plugin.json`, CHANGELOG and `SKILL.md`), plus the builder's local `claude plugin validate . --strict` output on the PR. This also closes advisory 1 of the first report.
+### Items needing user confirmation (0)
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at 1b8cba3. Tasks: 5 (limit 7). Components: 3 (limit 3).
+- Claims checked: 3 answers, each with command output in EST-3181.
+- Failure modes: see the first report.
 - Vision fit: no VISION.md
 <!-- refine-epic:end -->
