@@ -46,7 +46,8 @@ class TestReadmeLocalReview(unittest.TestCase):
     def test_what_leaves_paragraph(self):
         p = self.paragraph
         self.assertIn("The KEEP/DROP review runs on your machine and sends nothing anywhere.", p)
-        self.assertIn("only the kept samples (up to the 200 extracted, sent in batches of 100)", p)
+        self.assertIn("only the kept samples (up to the 200 extracted, sent in batches of 100;", p)
+        self.assertIn("the fingerprint step uses at most 100 of them)", p)
         self.assertIn("plus the reference set", p)
         self.assertIn("Rewriting text with `/revoice` never touches the API.", p)
 
