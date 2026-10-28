@@ -1,0 +1,14 @@
+{
+  "name": "revoice",
+  "version": "0.1.0",
+  "description": "Rewrite text so it reads like a specific person wrote it, using a local voice profile. /revoice rewrites, --sync pulls voices from SilverBullet, --build builds a voice from an email export.",
+  "author": {
+    "name": "Sam Estrin",
+    "url": "https://github.com/samestrin"
+  },
+  "homepage": "https://github.com/samestrin/revoice-skill",
+  "repository": "https://github.com/samestrin/revoice-skill",
+  "license": "MIT",
+  "keywords": ["writing", "voice", "rewrite", "style"],
+  "skills": "./skill"
+}
