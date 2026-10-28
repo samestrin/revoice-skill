@@ -6,7 +6,7 @@ Paths below: `SKILL` is this skill's folder (`~/.claude/skills/revoice/`), `WORK
 
 Rules for the whole build:
 
-- **The email is private.** Do not send samples anywhere except the text analysis API through `review-samples.py` and `build-profile.py`. The one exception is the opt-in fallback in phase 4: if the API review fails and the user says yes to a Claude review, that review sends the samples to Claude's model provider. In chat, quote at most a short line when asked.
+- **The email is private.** The review in phase 4 runs on this machine and sends nothing anywhere. The only step that sends samples off the machine is `build-profile.py` in phase 5, which sends the kept samples to the text analysis API. Do not send samples anywhere else. In chat, quote at most a short line when asked.
 - **Never read, print, or ask for the API key.** It lives in a key file (default `~/.config/revoice/api-key`). Only check that the file exists and is not empty (`test -s`). If the user pastes a key into the chat anyway, do not repeat it, and tell them it is now in the transcript and they may want a new key.
 - **Python:** use `python` if `python --version` reports Python 3.10 or newer, else `python3`. On Windows, `python3` is often a Microsoft Store shortcut; do not use it there.
 - **Long runs:** the helpers read big files one message at a time. If the mbox is over 500 MB, run the filter and extract steps in the background and wait for them to finish.
@@ -41,7 +41,7 @@ Run from `WORK`:
 <python> SKILL/build/extract-samples.py pre-ai.mbox --from <addr1> --from <addr2> --others -o reference   (only if the reference set is on)
 ```
 
-Report: messages kept by the date filter, samples written, and the top drop reasons. If there are fewer than 20 samples, say so and offer to rerun extraction with `--min-words 100` (the default is 150). Extraction keeps at most 200 samples, the longest first, which also bounds what the API review in phase 4 costs; if it reports samples over the cap, say how many were left out.
+Report: messages kept by the date filter, samples written, and the top drop reasons. If there are fewer than 20 samples, say so and offer to rerun extraction with `--min-words 100` (the default is 150). Extraction keeps at most 200 samples, the longest first; if it reports samples over the cap, say how many were left out.
 
 ## Phase 3: Check the API key
 
@@ -56,22 +56,10 @@ Check `test -s ~/.config/revoice/api-key`. If it is missing or empty, tell the u
 Run from `WORK`:
 
 ```
-<python> SKILL/build/review-samples.py
+<python> SKILL/build/review-samples.py --author "<Name>"
 ```
 
-It posts the samples to the text analysis API in batches, which marks each one KEEP or DROP, and adds `verdict,score,reason` columns to `samples/index.csv`. Do not read the samples yourself. Report the KEEP vs DROP counts it prints, and the top 3 drop reasons from the CSV's `reason` column. If fewer than 15 are KEEP, tell the user the profile will be weaker and ask whether to continue.
-
-If it fails, say why: HTTP 401 means the key is wrong (send the user back to phase 3), HTTP 402 means the account is out of credits, and a timeout or 5xx means the API is down. In each case `index.csv` is left unchanged. Then offer the fallback below, saying plainly that it sends the samples to Claude's model provider, and run it only if the user says yes.
-
-**Fallback (only if the user says yes):** read every sample listed in `samples/index.csv`, in full (in batches for large folders). For each, decide:
-
-- `verdict`: `KEEP` or `DROP`.
-- `score`: 1 to 5. 5 = several paragraphs of the author thinking and explaining in their own words. 1 = barely any real writing.
-- `reason`: a few words.
-
-DROP a sample when it is mostly: text the author did not write (pasted articles, quoted email that slipped through, boilerplate, forwards); lists, logs, code, tables or schedules rather than prose; form letters sent many times; written in someone else's name or voice; not in the author's usual language; or broken extraction (cut off, garbled, mostly signature). Do not DROP for being casual, short-ish, having typos, or touching a sensitive topic. Those are real voice.
-
-Add `verdict,score,reason` columns to `samples/index.csv`, keeping the existing columns and rows, as valid CSV, then report the counts and top drop reasons as above.
+It runs on this machine with no network and no API key. It marks each sample KEEP or DROP and adds `verdict,score,reason` columns to `samples/index.csv`. `--author` lets it drop a sample signed with a clearly different name. Do not read the samples yourself. Report the KEEP vs DROP counts it prints, and the top 3 drop reasons from the CSV's `reason` column. If fewer than 15 are KEEP, tell the user the profile will be weaker and ask whether to continue.
 
 ## Phase 5: Build the profile JSON
 
@@ -85,7 +73,7 @@ Leave out `--reference reference` if the reference set is off. It sends the kept
 
 ## Phase 6: Write the voice file
 
-1. Read `voice-profile.json`. Its `meta.samples.voice_profile` lists the samples the profile was built from. Read those samples in full. **The samples are the authority on how the author sounds; the JSON numbers are averages.** When they disagree, trust the samples. If you notice another address of the user's while reading the profile's samples (for example in their signature) that is not in the list, tell them and offer to rerun extraction with it added.
+1. Read `voice-profile.json`. Its `meta.samples.voice_profile` lists the samples the profile was built from. Read those samples in full. The local review is rule-based and can miss things: set aside any kept sample that clearly is not the author's own voice or language, and do not learn from it when writing the voice file. Say so in your report, with how many you set aside and why. **The samples are the authority on how the author sounds; the JSON numbers are averages.** When they disagree, trust the samples. If you notice another address of the user's while reading the profile's samples (for example in their signature) that is not in the list, tell them and offer to rerun extraction with it added.
 2. Write the voice file with these sections, in order:
    - `# <Name>: Writing Profile`, then one short paragraph on what this file is and that samples beat stats.
    - **The voice in one paragraph.**
