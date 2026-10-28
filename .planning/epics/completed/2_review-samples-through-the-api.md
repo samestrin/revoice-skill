@@ -1,3 +1,5 @@
+> Superseded by epic 2.1 on 2026-10-28, not done.
+
 # Epic Plan 2: Review samples through the text analysis API, not Claude
 
 - **Estimated time**: 1 day
