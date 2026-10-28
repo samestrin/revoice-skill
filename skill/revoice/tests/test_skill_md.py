@@ -46,5 +46,34 @@ class MissingConfigTest(unittest.TestCase):
         self.assertTrue((SKILL / "assets" / "example.md").is_file())
 
 
+BUILD = (SKILL / "build.md").read_text(encoding="utf-8")
+
+
+def build_phase(n: int) -> str:
+    match = re.search(rf"^## Phase {n}:.*?(?=^## Phase |\Z)", BUILD, re.M | re.S)
+    if not match:
+        raise AssertionError(f"build.md has no phase {n}")
+    return match.group(0)
+
+
+class BuildReviewTest(unittest.TestCase):
+    def test_no_remote_review_or_fallback(self):
+        self.assertNotIn("/analyze/sample-review", BUILD)
+        self.assertNotRegex(BUILD, r"(?i)fallback")
+        self.assertNotRegex(BUILD, r"(?i)claude'?s model provider")
+        self.assertNotRegex(BUILD, r"(?i)API review")
+
+    def test_review_is_local_with_author(self):
+        phase = build_phase(4)
+        self.assertIn('review-samples.py --author "<Name>"', phase)
+        self.assertNotRegex(phase, r"(?i)posts the samples|HTTP 40|timeout")
+        self.assertRegex(phase, r"KEEP vs DROP")
+
+    def test_phase_6_sets_aside_foreign_samples(self):
+        phase = build_phase(6)
+        self.assertRegex(phase, r"set aside any kept sample that clearly is not the author's own voice or language")
+        self.assertRegex(phase, r"Say so in your report")
+
+
 if __name__ == "__main__":
     unittest.main()
