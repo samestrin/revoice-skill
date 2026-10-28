@@ -124,5 +124,79 @@ class VoicesLocationTest(unittest.TestCase):
         self.assertIn(USER_VOICES, cfg)
 
 
+SKILL_DIR = "${CLAUDE_SKILL_DIR}"
+
+# Any spelling of a fixed install folder: ~/.claude/skills, $HOME/.claude/skills,
+# %USERPROFILE%\.claude\skills, or a plugin cache path.
+HARD_CODED = re.compile(r"\.claude[/\\](skills|plugins)\b")
+
+
+def shipped_text_files():
+    """Every text file the skill ships, except its own tests."""
+    for path in sorted(SKILL.rglob("*")):
+        if path.is_file() and "tests" not in path.relative_to(SKILL).parts and path.suffix in {".md", ".py", ".yaml"}:
+            yield path
+
+
+def frontmatter() -> str:
+    match = re.match(r"---\n(.*?)\n---\n", TEXT, re.S)
+    if not match:
+        raise AssertionError("SKILL.md has no frontmatter")
+    return match.group(1)
+
+
+def allowed_tools() -> list[str]:
+    match = re.search(r"(?m)^allowed-tools: (.*)$", frontmatter())
+    if not match:
+        raise AssertionError("SKILL.md has no allowed-tools")
+    return [tool.strip() for tool in match.group(1).split(", ")]
+
+
+class InstallPathTest(unittest.TestCase):
+    """The skill runs from a copied folder or from a plugin, so it names its own
+    folder with ${CLAUDE_SKILL_DIR}, never a fixed path."""
+
+    def test_no_hard_coded_install_path(self):
+        files = list(shipped_text_files())
+        self.assertIn(SKILL / "SKILL.md", files)
+        self.assertIn(SKILL / "build.md", files)
+        for path in files:
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                with self.subTest(file=path.name, line=n):
+                    self.assertNotRegex(line, HARD_CODED)
+
+    def test_skill_dir_names_its_own_folder(self):
+        self.assertRegex(TEXT, rf"(?m)^- Skill dir: `{re.escape(SKILL_DIR)}/`")
+        self.assertIn(f"`{SKILL_DIR}/assets/`", TEXT)
+        self.assertIn(f"read `{SKILL_DIR}/build.md`", TEXT)
+        self.assertIn(f"`{SKILL_DIR}/assets/<voice>.md`", skill_step(3))
+        self.assertIn(f"`{SKILL_DIR}/assets/<voice>-<audience>.md`", skill_step(3))
+        self.assertIn(f"`python3 {SKILL_DIR}/sync.py`", skill_step(6))
+
+    def test_allowed_tools_use_skill_dir(self):
+        tools = allowed_tools()
+        self.assertIn(f"Bash(python3 {SKILL_DIR}/sync.py:*)", tools)
+        self.assertIn(f"Bash(python {SKILL_DIR}/sync.py:*)", tools)
+
+    def test_no_fallback_path(self):
+        # ${CLAUDE_SKILL_DIR} is set in both installs; a second path would only drift.
+        self.assertNotIn("CLAUDE_PLUGIN_ROOT", TEXT)
+        self.assertNotIn("CLAUDE_PLUGIN_ROOT", BUILD)
+        self.assertRegex(TEXT, rf"(?m)^- Skill dir: `{re.escape(SKILL_DIR)}/`$")
+
+    def test_build_md_does_not_rely_on_expansion(self):
+        # build.md is read with the Read tool, not loaded as the skill, so
+        # Claude Code does not expand variables in it.
+        self.assertNotIn("${", BUILD)
+        self.assertRegex(BUILD, r"`SKILL` is this skill's folder \(the Skill dir in `SKILL\.md`")
+
+
+class CommandNameTest(unittest.TestCase):
+    def test_name_field_keeps_bare_revoice_command(self):
+        # A plugin skill answers to its bare name only when SKILL.md has a
+        # `name:` field; without it only /revoice:revoice works.
+        self.assertRegex(frontmatter(), r"(?m)^name: revoice$")
+
+
 if __name__ == "__main__":
     unittest.main()
