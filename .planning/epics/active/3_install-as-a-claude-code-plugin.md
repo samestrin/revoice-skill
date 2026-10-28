@@ -8,7 +8,7 @@
   - `skill/revoice/` (moves to `skills/revoice/` if the plugin layout requires it) — `SKILL.md`, `build.md`, `sync.py`, the build helpers, tests
   - root — `README.md`, `CHANGELOG.md`
 - **Base branch: `main`.** Every PR targets `main`.
-- **Depends on:** epic 2 merged (both edit `skill/revoice/build.md` and the README).
+- **Depends on:** epic 2.1 merged (it replaced epic 2; both edit `skill/revoice/build.md` and the README).
 
 ## Goal
 
