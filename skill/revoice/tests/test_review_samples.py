@@ -1,4 +1,7 @@
 import csv
+import io
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -254,6 +257,55 @@ class MainTest(unittest.TestCase):
             run_main(rs, "--samples", str(self.dir))
         self.assertIn("no samples", str(cm.exception))
         self.assertEqual((self.dir / "index.csv").read_bytes(), before)
+
+    def test_failed_run_leaves_index_unchanged(self):
+        sample_dir(self.dir, [PROSE, FILLERS[0]])
+        (self.dir / "001-s.md").unlink()
+        before = (self.dir / "index.csv").read_bytes()
+        with self.assertRaises(FileNotFoundError):
+            run_main(rs, "--samples", str(self.dir), "--author", AUTHOR)
+        self.assertEqual((self.dir / "index.csv").read_bytes(), before)
+        self.assertEqual(list(self.dir.glob("*.tmp")), [])
+
+    def test_failed_write_leaves_index_unchanged(self):
+        sample_dir(self.dir, [PROSE])
+        before = (self.dir / "index.csv").read_bytes()
+        with mock.patch.object(rs.os, "replace", side_effect=OSError("disk full")), \
+                self.assertRaises(OSError):
+            run_main(rs, "--samples", str(self.dir), "--author", AUTHOR)
+        self.assertEqual((self.dir / "index.csv").read_bytes(), before)
+        self.assertEqual(list(self.dir.glob("*.tmp")), [])
+
+
+class CliContract(unittest.TestCase):
+    """The output build-profile.py reads, and the command line build.md calls."""
+
+    def test_build_profile_ranks_the_review_output(self):
+        bp = load(BUILD / "build-profile.py", "build_profile")
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            short = "I can do Thursday, and I will bring the slides for the board."
+            sample_dir(d, [DROP_CASES[3][1], short, PROSE])
+            run_main(rs, "--samples", str(d), "--author", AUTHOR)
+            # KEEP rows only, best score first; the list sample is dropped.
+            self.assertEqual(bp.ranked_files(d), ["002-s.md", "001-s.md"])
+
+    def test_help(self):
+        out = subprocess.run([sys.executable, str(BUILD / "review-samples.py"), "--help"],
+                             capture_output=True, text=True, check=True).stdout
+        self.assertIn("--samples", out)
+        self.assertIn("--author", out)
+        self.assertNotIn("--api", out)
+
+    def test_api_arguments_dropped_here_only(self):
+        for arg in ("--api", "--api-key", "--api-key-file"):
+            with self.subTest(arg), self.assertRaises(SystemExit), \
+                    mock.patch("sys.stderr", io.StringIO()):
+                run_main(rs, arg, "x")
+        bp_help = subprocess.run([sys.executable, str(BUILD / "build-profile.py"), "--help"],
+                                 capture_output=True, text=True, check=True).stdout
+        for arg in ("--api", "--api-key", "--api-key-file"):
+            self.assertIn(arg, bp_help)
 
 
 if __name__ == "__main__":
