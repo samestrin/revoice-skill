@@ -13,8 +13,8 @@ Getting started is three steps: install the skill, save your API key, and run `/
 ## How it works
 
 1. You export your sent email as an MBOX file.
-2. `/revoice --build` keeps only emails from before AI tools, pulls out what you wrote yourself, and has Claude pick the ones that really sound like you.
-3. The best ones go to a text analysis API that measures your style.
+2. `/revoice --build` keeps only emails from before AI tools, pulls out what you wrote yourself, and sends them to a text analysis API that marks the ones that really sound like you.
+3. The API measures the style of the kept samples.
 4. Claude turns the measurements plus your real emails into a voice file, one readable Markdown file.
 5. `/revoice` uses that file to rewrite any text in your voice.
 
@@ -26,11 +26,13 @@ Getting started is three steps: install the skill, save your API key, and run `/
 
 ## Getting an API key
 
-1. Sign up at https://yourvoice.dev/ — you get 250 free credits on sign-up, enough to build a voice profile. Buy a credit pack only if you need more.
+1. Sign up at https://yourvoice.dev/ — you get 250 free credits on sign-up. Buy a credit pack only if you need more.
 2. On the dashboard, create an API key.
 3. Save the key to `~/.config/revoice/api-key` (step 2 below shows how).
 
 Only `--build` uses the key, and only to call `https://text-analysis-api.estr.in/`. Using `/revoice` to rewrite text never touches the API.
+
+Building the profile charges credits per text sent; the API's docs at https://text-analysis-api.estr.in/ say what each request costs.
 
 ## Text analysis API
 
@@ -125,7 +127,7 @@ Then, in Claude Code:
 /revoice --build
 ```
 
-Claude asks for the `.mbox` path, the addresses you send from, your name, and a few defaults, then does the rest: filtering, extracting, reviewing, building the profile, and writing your voice file. Claude Code asks you to approve when it saves the voice file into the skill folder. At the end it rewrites a sample email so you can see the result.
+Claude asks for the `.mbox` path, the addresses you send from, your name, and a few defaults, then does the rest: filtering, extracting, reviewing the samples through the API, building the profile, and writing your voice file. Claude Code asks you to approve when it saves the voice file into the skill folder. At the end it rewrites a sample email so you can see the result.
 
 You can also give the answers up front:
 
@@ -135,7 +137,7 @@ You can also give the answers up front:
 
 Read the voice file it wrote (`assets/<your-slug>.md` in the skill folder) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
-**Your email stays on your machine.** Only the samples chosen for your profile leave it, going to the text analysis API over HTTPS. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
+**What leaves your machine.** The full mailbox never does. The build pulls out up to 200 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The text analysis API gets, over HTTPS: every extracted sample for the KEEP/DROP review — including the ones it drops — then the kept samples again to measure your style, plus the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The review runs in the text analysis API; its docs at https://text-analysis-api.estr.in/ say which engine runs it. The reference set is on by default; answer no to it in the build questions to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. If the API review fails and you say yes to the offered Claude review instead, Claude reads every extracted sample, and they go to your Claude model provider. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
 
 Windows (PowerShell): `Remove-Item -Recurse -Force "$HOME\revoice-build\<your-slug>"`
 
@@ -159,7 +161,7 @@ The skill keeps every fact, number, name and ask from the input. It does not add
 
 ## Running the steps by hand
 
-The helpers are in `skill/revoice/build/` and each has `--help`. The order is `mbox-filter-before.py`, `extract-samples.py` (again with `--others` for the reference set), a review of `samples/index.csv`, then `build-profile.py`. `skill/revoice/build.md` describes each step, including the review rules and the voice file format.
+The helpers are in `skill/revoice/build/` and each has `--help`. The order is `mbox-filter-before.py`, `extract-samples.py` (again with `--others` for the reference set), `review-samples.py`, then `build-profile.py`. `skill/revoice/build.md` describes each step, including the review rules and the voice file format.
 
 ## Optional: SilverBullet
 

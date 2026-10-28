@@ -9,6 +9,7 @@ For each message sent FROM one of the given addresses:
     ...", and trailing lines that recur at the end of many messages)
   - keep it if what is left has at least --min-words words
   - skip exact duplicates
+  - keep at most --max-samples, the longest first (0 = no cap)
 
 With --others the sender filter is inverted: it keeps messages NOT from the
 given addresses. Use that to build a reference folder of other people's
@@ -130,6 +131,8 @@ def main() -> None:
     ap.add_argument("--others", action="store_true",
                     help="keep messages NOT from --from instead (builds a reference folder)")
     ap.add_argument("--min-words", type=int, default=150)
+    ap.add_argument("--max-samples", type=int, default=200,
+                    help="keep at most this many samples, the longest first (0 = no cap)")
     ap.add_argument("--sig-min-count", type=int, default=15,
                     help="a trailing line seen at the end of this many messages is a signature")
     ap.add_argument("-o", "--out", type=Path, default=Path("samples"))
@@ -191,6 +194,9 @@ def main() -> None:
             stats["duplicate"] += 1
             continue
         by_title[title_key].append(grams)
+        if args.max_samples and stats["kept"] >= args.max_samples:
+            stats["over the cap"] += 1
+            continue
         key = hashlib.sha1(" ".join(toks).encode()).hexdigest()
         title = RE_PREFIX.sub("", subject).strip()
         if not title:
