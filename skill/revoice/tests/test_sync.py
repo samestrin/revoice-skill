@@ -40,7 +40,7 @@ class SyncTest(unittest.TestCase):
         self.dir = Path(tmp.name)
         self.config = self.dir / "config.yaml"
         self.config.write_text("stub; parsed by the fake yaml\n")
-        self.assets = self.dir / "assets"
+        self.assets = self.dir / "voices"
         self.cfg = {
             "sb_url": "http://sb.test/",
             "voices": {"alex": {"sb_source": "Voices/Alex.md"},
@@ -56,7 +56,7 @@ class SyncTest(unittest.TestCase):
         fake_yaml = types.ModuleType("yaml")
         fake_yaml.safe_load = lambda f: self.cfg
         for p in (mock.patch.object(self.sync, "CONFIG", str(self.config)),
-                  mock.patch.object(self.sync, "ASSETS", str(self.assets)),
+                  mock.patch.object(self.sync, "VOICES", str(self.assets)),
                   mock.patch.object(self.sync, "fetch", self.fake_fetch),
                   mock.patch.dict(sys.modules, {"yaml": fake_yaml})):
             p.start()
@@ -119,11 +119,67 @@ class SyncTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("pip install pyyaml", err)
 
+    def test_slug_that_is_not_a_plain_name_is_refused(self):
+        self.cfg["voices"] = {"../escape": {"sb_source": "Voices/Alex.md"},
+                              "jordan": {"sb_source": "Voices/Jordan.md"}}
+        code, out, _ = self.run_sync()
+        self.assertEqual(code, 1)
+        self.assertIn("INVALID  ../escape", out)
+        self.assertEqual(os.listdir(self.assets), ["jordan.md"])
+        self.assertFalse((self.dir / "escape.md").exists())
+        self.assertNotIn(("http://sb.test/", "Voices/Alex.md"), self.fetched)
+
     def test_missing_config_is_a_clear_error(self):
         self.config.unlink()
         code, _, err = self.run_sync()
         self.assertEqual(code, 1)
         self.assertIn(str(self.config), err)
+
+
+def tree(root: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+class VoicesDirTest(unittest.TestCase):
+    """Voices live in ~/.config/revoice/voices/, outside the skill folder that a
+    plugin update replaces."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name)
+        env = mock.patch.dict(os.environ, {"HOME": str(self.home), "USERPROFILE": str(self.home)})
+        env.start()
+        self.addCleanup(env.stop)
+        # Loaded after HOME is patched, so its paths resolve under the fake home.
+        self.sync = load(SCRIPT, "sync_home")
+        self.voices = self.home / ".config" / "revoice" / "voices"
+
+    def test_paths_are_under_the_user_config(self):
+        self.assertEqual(Path(self.sync.VOICES), self.voices)
+        self.assertEqual(Path(self.sync.CONFIG), self.home / ".config" / "revoice" / "config.yaml")
+        self.assertFalse(hasattr(self.sync, "ASSETS"))
+
+    def test_sync_writes_only_under_the_voices_dir(self):
+        Path(self.sync.CONFIG).parent.mkdir(parents=True)
+        Path(self.sync.CONFIG).write_text("stub; parsed by the fake yaml\n")
+        cfg = {"sb_url": "http://sb.test", "audiences": ["formal"],
+               "voices": {"alex": {"sb_source": "Voices/Alex.md"}}}
+        notes = {"Voices/Alex.md": b"alex base", "Voices/Alex (formal).md": b"alex formal"}
+        fake_yaml = types.ModuleType("yaml")
+        fake_yaml.safe_load = lambda f: cfg
+        skill_before = tree(SKILL)
+        home_before = tree(self.home)
+        with mock.patch.object(self.sync, "fetch", lambda url, note: notes.get(note)), \
+                mock.patch.dict(sys.modules, {"yaml": fake_yaml}):
+            code, out = run_main(self.sync)
+        self.assertEqual(code, 0, out)
+        written = {k: v for k, v in tree(self.home).items() if home_before.get(k) != v}
+        self.assertEqual(written, {
+            os.path.join(".config", "revoice", "voices", "alex.md"): b"alex base",
+            os.path.join(".config", "revoice", "voices", "alex-formal.md"): b"alex formal",
+        })
+        self.assertEqual(tree(SKILL), skill_before)
 
 
 if __name__ == "__main__":

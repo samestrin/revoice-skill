@@ -1,7 +1,8 @@
 # revoice config. /revoice --build copies this to ~/.config/revoice/config.yaml
 # (Windows: C:\Users\<you>\.config\revoice\config.yaml). The skill reads it on every run.
 
-# Voice used when --voice is not given. Must match a file in the skill's assets/<slug>.md
+# Voice used when --voice is not given. Must match ~/.config/revoice/voices/<slug>.md
+# (or a voice bundled with the skill, such as example).
 default_voice: your-name
 
 # Base dir for relative local paths (--output-path, --template). Empty = current working directory.
@@ -14,7 +15,7 @@ default_template: ""
 # Audience used when --audience is not given. Empty = base voice only, no audience layer.
 default_audience: ""
 
-# Audiences --audience accepts. An optional assets/<slug>-<audience>.md holds only the
+# Audiences --audience accepts. An optional ~/.config/revoice/voices/<slug>-<audience>.md holds only the
 # differences from the base voice; without one, the skill uses short built-in steering.
 audiences: [casual, business, formal]
 
