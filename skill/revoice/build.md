@@ -2,7 +2,7 @@
 
 Walk the user from an email export to an installed voice file. Do the phases in order. Keep each message to the user short: what you did, the numbers, and what you need next.
 
-Paths below: `SKILL` is this skill's folder (`~/.claude/skills/revoice/`), `WORK` is the work folder chosen in phase 1.
+Paths below: `SKILL` is this skill's folder (the Skill dir in `SKILL.md`'s Paths, which is also the folder this file is in), `WORK` is the work folder chosen in phase 1.
 
 Rules for the whole build:
 
