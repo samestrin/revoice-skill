@@ -1,0 +1,15 @@
+{
+  "name": "revoice-skill",
+  "description": "The revoice plugin for Claude Code",
+  "owner": {
+    "name": "Sam Estrin",
+    "url": "https://github.com/samestrin"
+  },
+  "plugins": [
+    {
+      "name": "revoice",
+      "source": "./",
+      "description": "Rewrite text so it reads like a specific person wrote it, using a local voice profile."
+    }
+  ]
+}
