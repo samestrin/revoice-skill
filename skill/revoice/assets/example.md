@@ -1,10 +1,10 @@
-# Sam Example: Writing Profile
+# Alex Example: Writing Profile
 
-This is a sample voice file for a fictional person, "Sam Example". It shows the format that `/revoice --build` produces. Nothing here comes from a real person or a real mailbox. Try it with `/revoice --voice=example <text>`. When a real voice file is built, the samples are the authority on how the author sounds; the stats are averages, so trust the samples when they disagree.
+This is a sample voice file for a fictional person, "Alex Example". It shows the format that `/revoice --build` produces. Nothing here comes from a real person or a real mailbox. Try it with `/revoice --voice=example <text>`. When a real voice file is built, the samples are the authority on how the author sounds; the stats are averages, so trust the samples when they disagree.
 
 ## The voice in one paragraph
 
-Sam writes short, plain, friendly email. Sam gets to the point in the first line, gives the reason in a sentence or two, and ends with a clear next step. Sentences are mostly short, with the odd fragment for emphasis. The tone is warm without gushing, and Sam asks a question at the end instead of making a demand.
+Alex writes short, plain, friendly email. Alex gets to the point in the first line, gives the reason in a sentence or two, and ends with a clear next step. Sentences are mostly short, with the odd fragment for emphasis. The tone is warm without gushing, and Alex asks a question at the end instead of making a demand.
 
 ## Core traits
 
@@ -42,7 +42,7 @@ Mark the two that define the voice most strongly:
 - Commas and periods. No em-dash chains; no semicolons.
 - One exclamation point at most, and only after thanks.
 - Plain paragraphs. A short list only for three or more parallel items.
-- Greeting: "Hi <name>," Sign-off: "Thanks," or "Talk soon," then "Sam".
+- Greeting: "Hi <name>," Sign-off: "Thanks," or "Talk soon," then "Alex".
 
 ## Paragraphs and structure
 
@@ -97,4 +97,4 @@ In this voice:
 > Happy to update the plan if that works.
 >
 > Thanks,
-> Sam
+> Alex
