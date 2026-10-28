@@ -89,7 +89,7 @@ Leave out `--reference reference` if the reference set is off. It sends the kept
    - **Before and after:** one invented generic AI-style draft and the same message in this voice.
 3. **Privacy in quotes.** The file may be shared. Skip quotes with other people's private details: money about third parties, disputes, health, family, client rates, or anything addressed by name to someone the user works with now. Pick another line that shows the same habit.
 4. One paragraph per line (never hard-wrap prose). No emojis.
-5. Save it to `SKILL/assets/<slug>.md`. Claude Code asks the user to approve writes to its skills folder; tell them to expect that prompt. If the write is blocked, save to `WORK/<slug>.md` instead and give them the exact copy command for their system.
+5. Save it to `~/.config/revoice/voices/<slug>.md` (`mkdir -p` the folder first). Never save it inside `SKILL`: an update replaces that folder. Claude Code may ask the user to approve the write; tell them to expect that prompt. If the write is blocked, save to `WORK/<slug>.md` instead and give them the exact copy command for their system.
 
 ## Phase 7: Make it the default
 
@@ -105,4 +105,4 @@ Then finish with:
 
 - Where everything is: the voice file, `WORK` (samples, JSON), and that `WORK` holds private email they can delete once they are happy.
 - The 3 traits you are most and least sure about, so they know what to check first.
-- How to use it: `/revoice <text>`, `/revoice @file`, and `--audience=casual|business|formal`, with the tip that they can add `assets/<slug>-<audience>.md` holding only the differences for an audience.
+- How to use it: `/revoice <text>`, `/revoice @file`, and `--audience=casual|business|formal`, with the tip that they can add `~/.config/revoice/voices/<slug>-<audience>.md` holding only the differences for an audience.

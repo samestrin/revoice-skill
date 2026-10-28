@@ -1,6 +1,6 @@
 ---
 name: revoice
-description: Rewrite a body of text so it reads like a specific person wrote it, using a voice profile stored as a local asset (default voice from config). Input is inline text or an @file. Optional --voice= picks a profile, --audience=casual|business|formal steers it (using an <voice>-<audience>.md overlay if one exists), --template= supplies a structure to follow (local path, or sb:<note> for SilverBullet), --output-path= saves the result (local path, or sb:<note> for SilverBullet); with no output path the rewrite is only shown. SilverBullet support is optional; without it everything works with local files. --sync pulls voice profiles from SilverBullet into the skill's assets. --build walks the user through building their own voice profile from an email export (mbox). Use when the user runs /revoice or asks to rewrite, redraft, or convert text "in my voice" / "like me".
+description: Rewrite a body of text so it reads like a specific person wrote it, using a voice profile stored as a local file in ~/.config/revoice/voices/ (default voice from config). Input is inline text or an @file. Optional --voice= picks a profile, --audience=casual|business|formal steers it (using an <voice>-<audience>.md overlay if one exists), --template= supplies a structure to follow (local path, or sb:<note> for SilverBullet), --output-path= saves the result (local path, or sb:<note> for SilverBullet); with no output path the rewrite is only shown. SilverBullet support is optional; without it everything works with local files. --sync pulls voice profiles from SilverBullet into ~/.config/revoice/voices/. --build walks the user through building their own voice profile from an email export (mbox). Use when the user runs /revoice or asks to rewrite, redraft, or convert text "in my voice" / "like me".
 argument-hint: '[--voice=<slug>] [--audience=casual|business|formal] [--template=[sb:]<path>] [--output-path=[sb:]<path>] (@file | <text>)  |  --sync[=<slug>]  |  --build'
 allowed-tools: Read, Write, Bash(ls:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(python3 ~/.claude/skills/revoice/sync.py:*), Bash(python ~/.claude/skills/revoice/sync.py:*), Bash(python:*), Bash(python3:*), Bash(test:*), mcp__silverbullet__read-note, mcp__silverbullet__create-note
 metadata:
@@ -14,8 +14,9 @@ Arguments: `$ARGUMENTS`
 ## Paths
 
 - Skill dir: `~/.claude/skills/revoice/`
-- Voices: `~/.claude/skills/revoice/assets/<slug>.md` (one file per voice)
-- Audience overlays: `~/.claude/skills/revoice/assets/<slug>-<audience>.md` (optional, only the differences from the base voice)
+- Voices: `~/.config/revoice/voices/<slug>.md` (one file per voice; `--build` and `--sync` write here)
+- Audience overlays: `~/.config/revoice/voices/<slug>-<audience>.md` (optional, only the differences from the base voice)
+- Bundled voices: `~/.claude/skills/revoice/assets/` (ships `example.md`; part of the skill, replaced on update, never write here)
 - Config: `~/.config/revoice/config.yaml` (owned by the user; read it every run)
 
 Config keys:
@@ -65,11 +66,11 @@ Resolving a `<ref>` (same rule for `--template` and `--output-path`):
 
 ## Step 3: Load the voice and template
 
-- Read `assets/<voice>.md`. If it does not exist, list the files in `assets/` and stop.
+- Read `~/.config/revoice/voices/<voice>.md`. If it does not exist, read `~/.claude/skills/revoice/assets/<voice>.md` (the bundled voices; this is how `--voice=example` resolves). If neither exists, list the voices in both folders and stop.
 - Pick the audience: the flag, else `default_audience`, else none. Never infer one from the input.
 - No audience → use the base voice only. Skip the rest of this audience block.
 - Load the audience layer:
-  - If `assets/<voice>-<audience>.md` exists, read it. It is an overlay on the base voice: the base still applies, and where the two conflict the overlay wins.
+  - Look for `<voice>-<audience>.md` the same way: `~/.config/revoice/voices/<voice>-<audience>.md`, else `~/.claude/skills/revoice/assets/<voice>-<audience>.md`. If one exists, read it. It is an overlay on the base voice: the base still applies, and where the two conflict the overlay wins.
   - Otherwise use the built-in steering below, applied on top of the base voice. The base voice's rules still apply; the steering only turns its dials.
 - Built-in steering (fallback only):
   - `casual`: peer or friend. Use the voice's informal color (idioms, casual words) where it fits. Contractions freely. Short fragments and short sign-offs are fine.
@@ -111,6 +112,6 @@ Follow the voice profile as the authority on how the text should sound. Rules:
 
 ## Step 6: Sync (`--sync`)
 
-- Run `python3 ~/.claude/skills/revoice/sync.py` (add the slug for `--sync=<slug>`). On Windows use `python` instead of `python3` (there `python3` is a Microsoft Store shortcut). It needs PyYAML (`pip install pyyaml`). It fetches the raw notes over HTTP so they never pass through context. Do not use the SilverBullet MCP for sync, and do not write asset files by hand.
+- Run `python3 ~/.claude/skills/revoice/sync.py` (add the slug for `--sync=<slug>`). On Windows use `python` instead of `python3` (there `python3` is a Microsoft Store shortcut). It needs PyYAML (`pip install pyyaml`). It writes to `~/.config/revoice/voices/` and fetches the raw notes over HTTP so they never pass through context. Do not use the SilverBullet MCP for sync, and do not write voice files by hand.
 - It syncs each voice's base note and any audience overlay notes named `<base note> (<audience>).md`. SilverBullet is the master copy; never write the other way.
 - Report its output: which files were updated, skipped, or missing. If it exits non-zero, show the error.

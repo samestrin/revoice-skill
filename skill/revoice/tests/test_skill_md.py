@@ -75,5 +75,54 @@ class BuildReviewTest(unittest.TestCase):
         self.assertRegex(phase, r"Say so in your report")
 
 
+def skill_step(n: int) -> str:
+    match = re.search(rf"^## Step {n}:.*?(?=^## |\Z)", TEXT, re.M | re.S)
+    if not match:
+        raise AssertionError(f"SKILL.md has no step {n}")
+    return match.group(0)
+
+
+USER_VOICES = "~/.config/revoice/voices/"
+
+
+class VoicesLocationTest(unittest.TestCase):
+    """User voices live in ~/.config/revoice/voices/, which a plugin update never
+    touches; only example.md ships inside the skill."""
+
+    def test_paths_name_the_user_voices_dir(self):
+        self.assertRegex(TEXT, r"(?m)^- Voices: `~/\.config/revoice/voices/<slug>\.md`")
+        self.assertRegex(TEXT, r"(?m)^- Audience overlays: `~/\.config/revoice/voices/<slug>-<audience>\.md`")
+
+    def test_voice_is_read_from_user_dir_then_from_the_skill(self):
+        step = skill_step(3)
+        self.assertIn(f"`{USER_VOICES}<voice>.md`", step)
+        self.assertRegex(step, r"If it does not exist, read `[^`]*assets/<voice>\.md`")
+        self.assertRegex(step, r"`[^`]*assets/<voice>-<audience>\.md`")
+        self.assertNotRegex(step, r"Read `assets/<voice>\.md`\. If it does not exist, list")
+
+    def test_example_voice_still_resolves_from_the_skill(self):
+        self.assertTrue((SKILL / "assets" / "example.md").is_file())
+        self.assertRegex(skill_step(3), r"example")
+
+    def test_sync_and_description_point_at_user_dir(self):
+        self.assertNotIn("into the skill's assets", TEXT)
+        self.assertIn(USER_VOICES, skill_step(6))
+
+    def test_build_saves_the_voice_to_the_user_dir(self):
+        phase = build_phase(6)
+        self.assertIn(f"`{USER_VOICES}<slug>.md`", phase)
+        self.assertNotIn("SKILL/assets/", BUILD)
+        self.assertNotIn("skills folder", phase)
+
+    def test_build_overlay_tip_points_at_user_dir(self):
+        self.assertIn(f"`{USER_VOICES}<slug>-<audience>.md`", build_phase(8))
+        self.assertNotRegex(BUILD, r"(?<![/\w])assets/")
+
+    def test_example_config_points_at_user_dir(self):
+        cfg = (SKILL / "config.example.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("assets/", cfg)
+        self.assertIn(USER_VOICES, cfg)
+
+
 if __name__ == "__main__":
     unittest.main()
