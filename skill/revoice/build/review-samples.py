@@ -1,93 +1,265 @@
 #!/usr/bin/env python3
-"""Mark each extracted sample KEEP or DROP with the text analysis API.
+"""Mark each extracted sample KEEP or DROP with plain rules, on this machine.
 
-Reads samples/index.csv (from extract-samples.py), posts the samples to
-/analyze/sample-review in batches of at most 100, and adds the columns
-verdict, score and reason to index.csv. Existing columns and rows are kept.
-build-profile.py then uses only the KEEP rows, best score first.
+Reads samples/index.csv (from extract-samples.py), judges every sample file
+with the rules below, and adds the columns verdict, score and reason to
+index.csv. Existing columns and rows are kept. build-profile.py then uses only
+the KEEP rows, best score first. Nothing is sent anywhere: the script uses the
+standard library only and makes no network call.
 
-index.csv is replaced only after every batch succeeded, so a failed run
+A sample is DROPPED when it is: broken extraction (mostly signature or contact
+lines, many replacement or non-letter characters, or cut off mid-sentence and
+very short); mostly quoted, forwarded or boilerplate lines; mostly list, table,
+code or log lines; a near-duplicate form letter within the set; not in the
+author's usual language; or signed with a clearly different name than --author.
+score is 1-5 from prose length and paragraph structure. reason is one fixed
+label (see REASONS), never a quote from the email.
+
+index.csv is replaced only after every sample was judged, so a failed run
 leaves it as it was. A rerun reviews every sample again.
-
-The API key is read from --api-key, else the TEXT_ANALYSIS_API_KEY environment
-variable, else the key file (default ~/.config/revoice/api-key).
 """
 from __future__ import annotations
 import argparse
 import csv
-import json
 import os
-import socket
+import re
 import sys
 import tempfile
-import urllib.error
-import urllib.request
+from collections import Counter
 from pathlib import Path
 
-
-# The API accepts at most this many samples per request.
-BATCH = 100
-# The API's metered limit is 25 s; allow some slack for the network.
-TIMEOUT = 60
 COLUMNS = ["verdict", "score", "reason"]
 
+KEEP_REASON = "own writing"
+REASONS = [KEEP_REASON, "broken extraction", "quoted or forwarded text",
+           "list, table, code or log", "form letter", "not in the author's language",
+           "written in another name"]
 
-def post(api: str, path: str, body: dict, key: str) -> dict:
-    headers = {"Content-Type": "application/json", "X-API-Key": key}
-    req = urllib.request.Request(api + path, json.dumps(body).encode(), headers)
-    try:
-        return json.load(urllib.request.urlopen(req, timeout=TIMEOUT))
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:300]
-        if e.code == 401:
-            sys.exit("error: the API rejected the key (HTTP 401). Check the API key. "
-                     "index.csv was not changed.")
-        if e.code == 402:
-            sys.exit("error: out of credits (HTTP 402). Add credits and run again. "
-                     "index.csv was not changed.")
-        if e.code >= 500:
-            sys.exit(f"error: the API is down (HTTP {e.code}). Try again later. "
-                     "index.csv was not changed.")
-        sys.exit(f"error: {path} returned HTTP {e.code}: {detail}. index.csv was not changed.")
-    except (TimeoutError, socket.timeout, urllib.error.URLError) as e:
-        sys.exit(f"error: the API is down or did not answer in {TIMEOUT} s ({e}). "
-                 "Try again later. index.csv was not changed.")
+# A rule fires when at least this share of the non-blank lines match.
+MOSTLY = 0.5
+SIGNATURE_SHARE = 0.6
+# Broken extraction: replacement characters, and letters among non-space characters.
+MAX_REPLACEMENT_SHARE = 0.02
+MIN_LETTER_SHARE = 0.5
+# "Very short" for the cut-off check.
+CUT_OFF_WORDS = 12
+# Near-duplicates: word n-grams, and the bounds on the work done per sample.
+NGRAM = 5
+MIN_SHINGLES = 8  # shorter samples (a one-line reply) can repeat honestly
+MAX_SHINGLES = 500  # shingles looked at per sample
+BUCKET = 50  # samples remembered per shingle
+DUPLICATE_OVERLAP = 0.7
+# Language: share of common English function words.
+MIN_LANGUAGE_WORDS = 20
+ENGLISH_SHARE = 0.12  # below this a sample does not look English
+ENGLISH_AUTHOR_SHARE = 0.2  # the set's median must reach this for the check to run
+
+FUNCTION_WORDS = frozenset(
+    "the a an and or but of to in on at for with from by as is are was were be been it this "
+    "that these those i you he she we they my your our their me us them not no if so do does "
+    "did have has had will would can could should there what which who when about".split())
+DANGLING = frozenset(
+    "the a an and or but of to in on at for with from by as is are was were be that this "
+    "which who if so than then because my your our their his her its".split())
+CLOSINGS = re.compile(
+    r"^(thanks|thank you|best|best regards|kind regards|regards|warm regards|cheers|sincerely|"
+    r"yours|yours sincerely|yours truly|many thanks|all the best|take care|talk soon)\s*[,!.]?$",
+    re.I)
+NAME_LINE = re.compile(r"^[^\W\d_][\w.'-]*(\s+[^\W\d_][\w.'-]*){0,2}$")
+
+QUOTE = re.compile(r"^\s*>")
+FORWARD_START = re.compile(
+    r"^\s*(-{2,}\s*(original message|forwarded message)|begin forwarded message|"
+    r"_{5,}$|on .{5,120} wrote:\s*$)", re.I)
+HEADER = re.compile(r"^\s*(from|sent|to|cc|subject|date):\s", re.I)
+BOILERPLATE = re.compile(
+    r"confidential|intended (only )?for the|unsubscribe|privacy (notice|policy)|"
+    r"disclaimer|this (e-?mail|message) and any attachments|if you are not the intended", re.I)
+BULLET = re.compile(r"^\s*([-*\u2022\u25cf]|\d{1,3}[.)])\s+\S")
+TABLE = re.compile(r"\|.*\|?|\t\S.*\t|\S {3,}\S.* {3,}\S")
+CODE = re.compile(r"^(\t| {4})\s*\S|^\s*(def |class |import |from \S+ import |#include|\$ |```)|[{};]\s*$")
+LOG = re.compile(
+    r"^\s*\[?(\d{4}-\d\d-\d\d[ T]\d\d:\d\d|\d\d:\d\d:\d\d|"
+    r"(TRACE|DEBUG|INFO|WARN(ING)?|ERROR|FATAL)\b)")
+CONTACT = re.compile(
+    r"^\s*(--\s*$|(tel|phone|mobile|cell|fax|address|email|e-mail|web|www)\b[\s.:]|sent from my|"
+    r"get outlook|sent via)|(\+\d[\d\s().-]{7,}\d|\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})|\S+@\S+\.\S+|https?://\S+|www\.\S+", re.I)
+WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?")
 
 
 def body(path: Path) -> str:
     return path.read_text(encoding="utf-8").partition("\n")[2].strip()
 
 
-def review(api: str, key: str, samples: Path, rows: list[dict]) -> list[dict]:
-    """Return one {verdict, score, reason} dict per row, in row order."""
-    out: list[dict] = []
-    for i in range(0, len(rows), BATCH):
-        batch = rows[i:i + BATCH]
-        payload = {"samples": [{"id": r["file"], "text": body(samples / r["file"])} for r in batch]}
-        results = post(api, "/analyze/sample-review", payload, key).get("results")
-        if not isinstance(results, list) or [r.get("id") for r in results] != [r["file"] for r in batch]:
-            sys.exit("error: /analyze/sample-review returned results that do not match "
-                     "the samples sent. index.csv was not changed.")
-        out += [{"verdict": r["verdict"], "score": r["score"], "reason": r.get("reason", "")}
-                for r in results]
+def lines_of(text: str) -> list[str]:
+    return [l for l in text.splitlines() if l.strip()]
+
+
+def share(lines: list[str], hit) -> float:
+    return sum(1 for l in lines if hit(l)) / len(lines) if lines else 0.0
+
+
+def words(text: str) -> list[str]:
+    return [w.lower() for w in WORD.findall(text)]
+
+
+def is_broken(text: str) -> bool:
+    lines = lines_of(text)
+    if not lines:
+        return True
+    if share(lines, CONTACT.search) >= SIGNATURE_SHARE:
+        return True
+    chars = [c for c in text if not c.isspace()]
+    return chars.count("\ufffd") / len(chars) > MAX_REPLACEMENT_SHARE
+
+
+def is_garbled(text: str) -> bool:
+    """Mostly non-letters, or cut off mid-sentence and very short.
+
+    Checked after the list and log rules, which also have few letters.
+    """
+    chars = [c for c in text if not c.isspace()]
+    if sum(c.isalpha() for c in chars) / len(chars) < MIN_LETTER_SHARE:
+        return True
+    ws = text.split()
+    last = ws[-1].lower().strip("\"'")
+    return len(ws) < CUT_OFF_WORDS and (
+        last.rstrip(",;:-\u2013\u2014(") != last or last in DANGLING)
+
+
+def is_quoted(text: str) -> bool:
+    lines = lines_of(text)
+    quoted = 0
+    forwarded = False
+    for l in lines:
+        if FORWARD_START.search(l):
+            forwarded = True
+        if forwarded or QUOTE.search(l) or BOILERPLATE.search(l) or HEADER.search(l):
+            quoted += 1
+    return bool(lines) and quoted / len(lines) >= MOSTLY
+
+
+def is_structured(text: str) -> bool:
+    lines = lines_of(text)
+    n = sum(1 for l in lines if BULLET.search(l) or TABLE.search(l) or CODE.search(l) or LOG.search(l))
+    return n >= 2 and n / len(lines) >= MOSTLY
+
+
+def shingles(text: str) -> set[int]:
+    ws = words(text)
+    grams = (hash(tuple(ws[i:i + NGRAM])) for i in range(len(ws) - NGRAM + 1))
+    out: set[int] = set()
+    for g in grams:
+        out.add(g)
+        if len(out) >= MAX_SHINGLES:
+            break
+    return out
+
+
+def find_duplicates(texts: list[str], stats: dict | None = None) -> set[int]:
+    """Indexes of samples that share most word 5-grams with another sample.
+
+    Work is bounded: at most MAX_SHINGLES shingles per sample, and each
+    shingle remembers at most BUCKET samples, so a sample is compared with at
+    most BUCKET other samples per shingle however large the set is.
+    """
+    index: dict[int, list[int]] = {}
+    shingles_of: dict[int, set[int]] = {}
+    dups: set[int] = set()
+    stats = stats if stats is not None else {}
+    stats.update(max_candidates=0, max_shingles=0)
+    for i, text in enumerate(texts):
+        sh = shingles(text)
+        stats["max_shingles"] = max(stats["max_shingles"], len(sh))
+        if len(sh) < MIN_SHINGLES:
+            continue
+        seen: Counter = Counter()
+        for g in sh:
+            for j in index.get(g, ()):
+                seen[j] += 1
+        stats["max_candidates"] = max(stats["max_candidates"], len(seen))
+        for j, n in seen.items():
+            if n / min(len(sh), len(shingles_of[j])) >= DUPLICATE_OVERLAP:
+                dups.update((i, j))
+        for g in sh:
+            bucket = index.setdefault(g, [])
+            if len(bucket) < BUCKET:
+                bucket.append(i)
+        shingles_of[i] = sh
+    return dups
+
+
+def english_share(text: str) -> float:
+    ws = words(text)
+    return sum(w in FUNCTION_WORDS for w in ws) / len(ws) if ws else 0.0
+
+
+def signoff_name(text: str) -> str:
+    """The name on the line after a closing such as "Thanks," ("" if none)."""
+    lines = [l.strip() for l in lines_of(text)]
+    for k in range(len(lines) - 2, -1, -1):
+        if CLOSINGS.match(lines[k]):
+            nxt = lines[k + 1]
+            return nxt if NAME_LINE.match(nxt) and len(nxt) <= 40 else ""
+    return ""
+
+
+def other_name(text: str, author: str) -> bool:
+    """True when the sign-off name clearly is not the author's."""
+    name, mine = signoff_name(text), author.lower().replace(".", " ").split()
+    if not name or not mine:
+        return False
+    for tok in name.lower().replace(".", " ").split():
+        if any(a.startswith(tok) or tok.startswith(a) for a in mine):
+            return False
+    return True
+
+
+def score(text: str) -> int:
+    n = len(words(text))
+    paras = sum(1 for p in re.split(r"\n\s*\n", text) if len(words(p)) >= 8)
+    s = 1 if n < 15 else 2 if n < 50 else 3 if n < 100 else 4 if n < 200 else 5
+    if s > 2 and paras <= 1:
+        s -= 1
+    elif s < 5 and paras >= 3 and n >= 60:
+        s += 1
+    return max(1, min(5, s))
+
+
+def review(texts: list[str], author: str = "") -> list[dict]:
+    """Return one {verdict, score, reason} dict per text, in order."""
+    dups = find_duplicates(texts)
+    shares = sorted(english_share(t) for t in texts if len(words(t)) >= MIN_LANGUAGE_WORDS)
+    english_set = bool(shares) and shares[len(shares) // 2] >= ENGLISH_AUTHOR_SHARE
+    out = []
+    for i, t in enumerate(texts):
+        if is_broken(t):
+            reason = "broken extraction"
+        elif is_quoted(t):
+            reason = "quoted or forwarded text"
+        elif is_structured(t):
+            reason = "list, table, code or log"
+        elif is_garbled(t):
+            reason = "broken extraction"
+        elif i in dups:
+            reason = "form letter"
+        elif english_set and len(words(t)) >= MIN_LANGUAGE_WORDS and english_share(t) < ENGLISH_SHARE:
+            reason = "not in the author's language"
+        elif other_name(t, author):
+            reason = "written in another name"
+        else:
+            reason = KEEP_REASON
+        out.append({"verdict": "KEEP" if reason == KEEP_REASON else "DROP",
+                    "score": score(t), "reason": reason})
     return out
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--samples", type=Path, default=Path("samples"))
-    ap.add_argument("--api", default="https://text-analysis-api.estr.in")
-    ap.add_argument("--api-key", default=os.environ.get("TEXT_ANALYSIS_API_KEY"))
-    ap.add_argument("--api-key-file", type=Path,
-                    default=Path.home() / ".config" / "revoice" / "api-key")
+    ap.add_argument("--author", default="",
+                    help="the author's name; a sign-off with a clearly different name is dropped")
     args = ap.parse_args()
-    if not args.api_key and args.api_key_file.is_file():
-        # utf-8-sig: Notepad and PowerShell may save the file with a BOM
-        args.api_key = args.api_key_file.read_text(encoding="utf-8-sig").strip()
-    if not args.api_key:
-        sys.exit(f"error: no API key. Save it in {args.api_key_file}, "
-                 "or set TEXT_ANALYSIS_API_KEY, or pass --api-key.")
-    api, key = args.api.rstrip("/"), args.api_key
 
     index = args.samples / "index.csv"
     with open(index, newline="", encoding="utf-8") as f:
@@ -97,7 +269,7 @@ def main() -> None:
     if not rows:
         sys.exit(f"error: no samples in {index}")
 
-    verdicts = review(api, key, args.samples, rows)
+    verdicts = review([body(args.samples / r["file"]) for r in rows], args.author)
 
     fields += [c for c in COLUMNS if c not in fields]
     fd, tmp = tempfile.mkstemp(dir=args.samples, prefix="index.", suffix=".tmp")
@@ -112,6 +284,9 @@ def main() -> None:
         raise
     keep = sum(v["verdict"] == "KEEP" for v in verdicts)
     print(f"reviewed {len(rows)} samples: {keep} KEEP, {len(rows) - keep} DROP")
+    drops = Counter(v["reason"] for v in verdicts if v["verdict"] == "DROP")
+    for reason, n in drops.most_common():
+        print(f"  dropped {n}: {reason}")
 
 
 if __name__ == "__main__":

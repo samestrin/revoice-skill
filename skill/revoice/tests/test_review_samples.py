@@ -81,6 +81,16 @@ KEEP_CASES = [
 ]
 
 
+FILLERS = [
+    "I have been thinking about the schedule for next month and I do not believe that we can "
+    "finish everything that is on the list without asking for some help from the other team.",
+    "Please send me the notes from the meeting when you have a minute, because I want to make "
+    "sure that I understood what was decided about the budget and who is going to do the work.",
+    "The weather was bad all week so we stayed inside and played games with the kids, and it "
+    "turned out to be one of the nicest weekends that we have had in a long time.",
+]
+
+
 def sample_dir(tmp, texts):
     rows = []
     for i, text in enumerate(texts):
@@ -94,8 +104,9 @@ def sample_dir(tmp, texts):
 
 
 class Rules(unittest.TestCase):
-    def judge(self, text, **kw):
-        return rs.review([text], AUTHOR, **kw)[0]
+    def judge(self, text):
+        # The language check compares a sample with the rest of the set.
+        return rs.review([text, *FILLERS], AUTHOR)[0]
 
     def test_each_drop_rule(self):
         for name, text, verdict, reason in DROP_CASES:
@@ -162,7 +173,7 @@ class Rules(unittest.TestCase):
         self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP"])
 
     def test_near_duplicate_work_is_bounded(self):
-        letter = " ".join(f"word{i}" for i in range(2000))
+        letter = " ".join(f"{a}{b}x" for a in "abcdefghij" for b in "abcdefghijklmnopqrst" for _ in "12")
         stats = {}
         dups = rs.find_duplicates([letter] * 300, stats)
         self.assertEqual(dups, set(range(300)))
@@ -172,11 +183,12 @@ class Rules(unittest.TestCase):
     def test_other_language_follows_the_authors_set(self):
         german = DROP_CASES[7][1]
         # An author whose whole set is German: the check must not drop everything.
-        out = rs.review([german, german.replace("Bitte", "Danke") + " Das ist so."], AUTHOR)
+        out = rs.review([german, "Heute ist das Wetter schön und ich gehe mit dem Hund spazieren, "
+                         "weil er nicht zu lange allein bleiben soll und es ihm gut tut."], AUTHOR)
         self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP"])
         # One German sample among English ones is dropped.
-        out = rs.review([PROSE, PROSE + " ", german], AUTHOR)
-        self.assertEqual(out[2]["reason"], "not in the author's language")
+        out = rs.review([PROSE, *FILLERS[:2], german], AUTHOR)
+        self.assertEqual(out[3]["reason"], "not in the author's language")
 
 
 class MainTest(unittest.TestCase):
@@ -191,7 +203,7 @@ class MainTest(unittest.TestCase):
             return reader.fieldnames, list(reader)
 
     def test_main_runs_with_sockets_blocked_and_no_key(self):
-        sample_dir(self.dir, [PROSE, DROP_CASES[3][1], PROSE.replace("Alex", "Jordan Nobody")])
+        sample_dir(self.dir, [PROSE, DROP_CASES[3][1], FILLERS[0].replace("\n", " ") + "\n\nThanks,\nJordan Nobody"])
         with mock.patch("socket.socket", side_effect=AssertionError("network used")), \
                 mock.patch("socket.create_connection", side_effect=AssertionError("network used")), \
                 mock.patch.dict("os.environ", {}, clear=True):
