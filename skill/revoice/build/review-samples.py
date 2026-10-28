@@ -61,6 +61,7 @@ FUNCTION_WORDS = frozenset(
 DANGLING = frozenset(
     "the a an and or but of to in on at for with from by as is are was were be that this "
     "which who if so than then because my your our their his her its".split())
+COMMON_NON_NAMES = frozenset("will see give talk call let get send thanks soon later again".split())
 CLOSINGS = re.compile(
     r"^(thanks|thank you|best|best regards|kind regards|regards|warm regards|cheers|sincerely|"
     r"yours|yours sincerely|yours truly|many thanks|all the best|take care|talk soon)\s*[,!.]?$",
@@ -81,9 +82,13 @@ CODE = re.compile(r"^(\t| {4})\s*\S|^\s*(def |class |import |from \S+ import |#i
 LOG = re.compile(
     r"^\s*\[?(\d{4}-\d\d-\d\d[ T]\d\d:\d\d|\d\d:\d\d:\d\d|"
     r"(TRACE|DEBUG|INFO|WARN(ING)?|ERROR|FATAL)\b)")
-CONTACT = re.compile(
+CONTACT_LABEL = re.compile(
     r"^\s*(--\s*$|(tel|phone|mobile|cell|fax|address|email|e-mail|web|www)\b[\s.:]|sent from my|"
-    r"get outlook|sent via)|(\+\d[\d\s().-]{7,}\d|\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})|\S+@\S+\.\S+|https?://\S+|www\.\S+", re.I)
+    r"get outlook|sent via)", re.I)
+# An address, URL or phone number; a line is contact-like when little else is on it.
+CONTACT_ITEM = re.compile(
+    r"\+\d[\d\s().-]{7,}\d|\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}|\S+@\S+\.\S+|https?://\S+|www\.\S+")
+CONTACT_EXTRA_WORDS = 3
 WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?")
 
 
@@ -93,6 +98,13 @@ def body(path: Path) -> str:
 
 def lines_of(text: str) -> list[str]:
     return [l for l in text.splitlines() if l.strip()]
+
+
+def is_contact(line: str) -> bool:
+    if CONTACT_LABEL.search(line):
+        return True
+    rest = CONTACT_ITEM.sub(" ", line)
+    return rest != line and len(words(rest)) <= CONTACT_EXTRA_WORDS
 
 
 def share(lines: list[str], hit) -> float:
@@ -107,7 +119,7 @@ def is_broken(text: str) -> bool:
     lines = lines_of(text)
     if not lines:
         return True
-    if share(lines, CONTACT.search) >= SIGNATURE_SHARE:
+    if share(lines, is_contact) >= SIGNATURE_SHARE:
         return True
     chars = [c for c in text if not c.isspace()]
     return chars.count("\ufffd") / len(chars) > MAX_REPLACEMENT_SHARE
@@ -208,6 +220,11 @@ def other_name(text: str, author: str) -> bool:
     """True when the sign-off name clearly is not the author's."""
     name, mine = signoff_name(text), author.lower().replace(".", " ").split()
     if not name or not mine:
+        return False
+    # A name is capitalised and has no ordinary word in it ("Will follow up" is not one).
+    toks = name.replace(".", " ").split()
+    if any(not t[0].isupper() or t.lower() in FUNCTION_WORDS or t.lower() in COMMON_NON_NAMES
+           for t in toks if t.lower() not in mine and not any(a.startswith(t.lower()) for a in mine)):
         return False
     for tok in name.lower().replace(".", " ").split():
         if any(a.startswith(tok) or tok.startswith(a) for a in mine):

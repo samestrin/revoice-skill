@@ -138,6 +138,33 @@ class Rules(unittest.TestCase):
         text = PROSE.replace("Thanks,\nAlex", "Thanks,\nsee you at the conference next week")
         self.assertEqual(self.judge(text)["verdict"], "KEEP")
 
+    def test_ordinary_phrase_after_closing_is_not_another_name(self):
+        for phrase in ["Will follow up", "See you Friday", "Give me a call", "talk soon then"]:
+            with self.subTest(phrase):
+                self.assertEqual(self.judge(PROSE.replace("Alex", phrase))["verdict"], "KEEP")
+
+    def test_overlong_name_line_is_not_a_name(self):
+        long_name = "Bartholomew Montgomery Featherstonehaugh-Smythe"
+        self.assertGreater(len(long_name), 40)
+        self.assertEqual(self.judge(PROSE.replace("Alex", long_name))["verdict"], "KEEP")
+
+    def test_addresses_inside_prose_are_not_contact_lines(self):
+        text = ("Please forward the invoice from accounts@example.com to billing@example.com.\n"
+                "Also copy me at me@example.com so I have it on file.\nThanks,")
+        self.assertEqual(self.judge(text)["verdict"], "KEEP")
+
+    def test_single_list_line_is_not_a_list(self):
+        self.assertEqual(self.judge("- eggs")["verdict"], "KEEP")
+        self.assertEqual(self.judge("- eggs\n- milk")["reason"], "list, table, code or log")
+
+    def test_short_repeats_kept_longer_repeats_dropped(self):
+        eleven = "Please send the signed form back to me by next Friday."  # 7 shingles
+        twelve = "Please send the signed form back to me by next Friday morning."  # 8 shingles
+        self.assertEqual([o["verdict"] for o in rs.review([eleven, eleven, *FILLERS], AUTHOR)[:2]],
+                         ["KEEP", "KEEP"])
+        self.assertEqual([o["verdict"] for o in rs.review([twelve, twelve, *FILLERS], AUTHOR)[:2]],
+                         ["DROP", "DROP"])
+
     def test_reason_is_never_a_quote(self):
         for _, text, _, _ in DROP_CASES:
             r = self.judge(text)
@@ -173,12 +200,12 @@ class Rules(unittest.TestCase):
         self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP"])
 
     def test_near_duplicate_work_is_bounded(self):
-        letter = " ".join(f"{a}{b}x" for a in "abcdefghij" for b in "abcdefghijklmnopqrst" for _ in "12")
+        letter = " ".join(f"{a}{b}x" for a in "abcdefghij" for b in "abcdefghijklmnopqrst" for _ in "1234")
         stats = {}
         dups = rs.find_duplicates([letter] * 300, stats)
         self.assertEqual(dups, set(range(300)))
         self.assertLessEqual(stats["max_candidates"], rs.BUCKET)
-        self.assertLessEqual(stats["max_shingles"], rs.MAX_SHINGLES)
+        self.assertEqual(stats["max_shingles"], rs.MAX_SHINGLES)
 
     def test_other_language_follows_the_authors_set(self):
         german = DROP_CASES[7][1]
