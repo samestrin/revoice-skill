@@ -13,8 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `build.md` phase 4 now runs `review-samples.py --author "<Name>"` locally and reports the KEEP/DROP counts and top reasons; the API error handling and the Claude fallback are gone. Phase 6 tells Claude to set aside any kept sample that is clearly not the author's own voice or language, and to say so in the report.
-- `--build` now reviews the extracted samples through the text analysis API (`review-samples.py`, new phase 4) instead of Claude reading every sample; Claude reads only the samples the profile is built from. If the API review fails, an opt-in Claude review is offered as a fallback, with a clear note that the samples then go to Claude's model provider.
+- `--build` now reviews the extracted samples locally: `build.md` phase 4 runs `review-samples.py --author "<Name>"` on your machine and reports the KEEP/DROP counts and top reasons, with no network access. Phase 6 tells Claude to set aside any kept sample that is clearly not the author's own voice or language, and to say so in the report.
 - README updated to match: the "What leaves your machine" paragraph says the KEEP/DROP review runs on your machine and sends nothing anywhere, that the API gets only the kept samples (up to the 200 extracted, in batches of 100) plus the reference set to build the profile, that Claude reads only the 15 (`--top`) profile samples, and that rewriting never touches the API; the "How it works" steps, the build walkthrough and the "Running the steps by hand" order say the review is local; and the API key section says a build charges credits per text sent. The README no longer states the review engine, the per-request credit cost, or that the 250 free credits cover a build — those are undecided in the API — and points to the API's docs for cost instead.
 
 ### Changed
