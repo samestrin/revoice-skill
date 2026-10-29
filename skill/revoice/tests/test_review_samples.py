@@ -229,6 +229,29 @@ class Rules(unittest.TestCase):
         out = rs.review([PROSE, *FILLERS[:2], german], AUTHOR)
         self.assertEqual(out[3]["reason"], "not in the author's language")
 
+    def test_german_author_drops_a_stray_english_sample(self):
+        german = [DROP_CASES[7][1], *GERMAN]
+        out = rs.review([*german, FILLERS[0]], AUTHOR)
+        self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP", "KEEP", "DROP"])
+        self.assertEqual(out[3]["reason"], "not in the author's language")
+        # A German-only set is all kept, and a short English line is too short to judge.
+        out = rs.review([*german, "Thanks, will do"], AUTHOR)
+        self.assertEqual([o["verdict"] for o in out], ["KEEP"] * 4)
+
+    def test_english_author_still_checked_in_english(self):
+        # A German line among English samples: English stays the author's language.
+        out = rs.review([*FILLERS, GERMAN[0]], AUTHOR)
+        self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP", "KEEP", "DROP"])
+        self.assertEqual(rs.FUNCTION_WORDS, rs.LANGUAGE_WORDS["english"])
+
+
+GERMAN = [
+    "Heute ist das Wetter schön und ich gehe mit dem Hund spazieren, weil er nicht zu lange "
+    "allein bleiben soll und es ihm gut tut.",
+    "Kannst du mir bitte bis Freitag die Zahlen schicken, damit ich den Bericht für die "
+    "Sitzung fertig machen kann? Wir haben nicht mehr viel Zeit und ich will das Team nicht warten lassen.",
+]
+
 
 class MainTest(unittest.TestCase):
     def setUp(self):
