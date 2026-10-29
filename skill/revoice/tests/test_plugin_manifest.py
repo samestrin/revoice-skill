@@ -8,6 +8,7 @@ does nothing for users unless the version changes).
 """
 import json
 import re
+import struct
 import unittest
 
 from _load import SKILL
@@ -18,6 +19,34 @@ PLUGIN_DIR = ROOT / ".claude-plugin"
 
 def read_json(name: str) -> dict:
     return json.loads((PLUGIN_DIR / name).read_text(encoding="utf-8"))
+
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+ICON_MIN_PX = 512
+ICON_MAX_PX = 2048
+ICON_MAX_BYTES = 2 * 1024 * 1024
+
+
+def png_size(data: bytes) -> tuple[int, int]:
+    """Width and height from the IHDR chunk of PNG bytes."""
+    if data[:8] != PNG_SIGNATURE:
+        raise AssertionError("icon is not a PNG (bad signature)")
+    if len(data) < 24:
+        raise AssertionError("icon PNG has no IHDR chunk first (file too short)")
+    length, kind = struct.unpack(">I4s", data[8:16])
+    if kind != b"IHDR" or length != 13:
+        raise AssertionError("icon PNG has no IHDR chunk first")
+    return struct.unpack(">II", data[16:24])
+
+
+def check_icon(data: bytes) -> None:
+    if len(data) >= ICON_MAX_BYTES:
+        raise AssertionError("icon is 2 MB or larger")
+    width, height = png_size(data)
+    if width != height:
+        raise AssertionError(f"icon is not square: {width}x{height}")
+    if not ICON_MIN_PX <= width <= ICON_MAX_PX:
+        raise AssertionError(f"icon side {width}px is outside 512-2048")
 
 
 def newest_released_version(text: str | None = None) -> str:
@@ -69,6 +98,13 @@ class PluginJsonTest(unittest.TestCase):
         self.assertEqual(self.plugin["version"], version)
 
 
+    def test_icon_is_a_square_png_in_range(self):
+        icon = self.plugin["icon"]
+        path = ROOT / icon  # relative to the plugin root
+        self.assertTrue(path.is_file(), f"{icon} does not exist")
+        check_icon(path.read_bytes())
+
+
 class MarketplaceJsonTest(unittest.TestCase):
     def setUp(self):
         self.market = read_json("marketplace.json")
@@ -105,6 +141,24 @@ class HelpersTest(unittest.TestCase):
         text = "---\nname: revoice\nmetadata:\n  author: someone\n---\n# revoice\n"
         with self.assertRaisesRegex(AssertionError, "no metadata.version"):
             skill_md_version(text)
+
+    def test_icon_rejects_bad_files(self):
+        def png(w, h):
+            return PNG_SIGNATURE + struct.pack(">I4sII", 13, b"IHDR", w, h) + b"\0" * 5
+
+        check_icon(png(512, 512))
+        check_icon(png(2048, 2048))
+        for data, msg in [
+            (b"<svg/>" + b"\0" * 30, "not a PNG"),
+            (PNG_SIGNATURE + struct.pack(">I4s", 13, b"tEXt") + b"\0" * 13, "no IHDR"),
+            (PNG_SIGNATURE + b"\0" * 4, "no IHDR"),
+            (png(256, 256), "outside"),
+            (png(4096, 4096), "outside"),
+            (png(512, 1024), "not square"),
+            (png(512, 512) + b"\0" * ICON_MAX_BYTES, "2 MB"),
+        ]:
+            with self.assertRaisesRegex(AssertionError, msg):
+                check_icon(data)
 
 
 if __name__ == "__main__":
