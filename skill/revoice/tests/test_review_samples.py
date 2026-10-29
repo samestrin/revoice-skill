@@ -244,6 +244,15 @@ class Rules(unittest.TestCase):
         self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP", "KEEP", "DROP"])
         self.assertEqual(rs.FUNCTION_WORDS, rs.LANGUAGE_WORDS["english"])
 
+    def test_unknown_language_runs_no_check(self):
+        spanish = ("Ayer hablé con el equipo y decidimos mover la publicación a la próxima semana, "
+                   "porque todavía quedan algunos errores por corregir y las pruebas no terminaron.")
+        other = ("Mañana voy a llamar al cliente para explicarle el retraso y luego te cuento "
+                 "qué dijo, pero creo que lo va a entender sin problema porque ya lo sabía.")
+        self.assertIsNone(rs.author_language([spanish, other]))
+        out = rs.review([spanish, other, FILLERS[0]], AUTHOR)
+        self.assertEqual([o["verdict"] for o in out], ["KEEP"] * 3)
+
 
 GERMAN = [
     "Heute ist das Wetter schön und ich gehe mit dem Hund spazieren, weil er nicht zu lange "
