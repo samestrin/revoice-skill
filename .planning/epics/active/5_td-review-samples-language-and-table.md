@@ -26,15 +26,61 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 ## Tasks (canonical)
 
 - **T1** — TABLE: require two pipes (`\|.*\|`); add a failing test where a prose line with one `|` is not table-like and a two-pipe row is · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: none · tier: junior · success: the new test fails before and passes after; never by weakening or deleting a test
-- **T2** — Language: add per-language function-word lists (at least one non-English language chosen in the refine) with detection of the dominant language of the author's samples, keeping English behaviour unchanged; failing test first · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: T1 · tier: senior · success: a non-English sample set is filtered by its own language and English tests still pass; never by weakening or deleting a test. If the refine judges this row not worth the size, it may drop T2 and leave the row open.
+- **T2** — Language: add a German function-word list beside the English `FUNCTION_WORDS` (which stays English for `other_name`); `review()` picks the dominant language of the author's samples (highest median share over samples of 20+ words, reaching `ENGLISH_AUTHOR_SHARE`) and drops samples under `ENGLISH_SHARE` in that language; English behaviour unchanged; failing test first (a German-majority set with a stray English sample drops the English one) · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: T1 · tier: senior · success: a German-majority sample set drops its off-language sample as "not in the author's language", a German-only set is still all kept, and English tests still pass; never by weakening or deleting a test
 
 ## Acceptance criteria
 
 - [ ] A prose line with a single `|` is not counted as table-like.
-- [ ] A non-English author's samples get a language filter.
+- [ ] A German author's samples get a language filter (other languages are tracked in a technical-debt row).
 - [ ] CI is green.
 
 ## Repo rules
 
 - Never run `deploy.sh`; never write to `~/.claude/skills/` or `~/.agents/skills/`.
 - Every task ends green on `python3 -m unittest discover -s skill/revoice/tests`, never by weakening or deleting a test.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-29)
+### Auto-applied corrections (0)
+### Items needing user confirmation (2)
+1. **T2 scope: which languages, and is it worth doing.** Current State is partly stale: `review()` (`skill/revoice/build/review-samples.py:247-250`) already follows the author's set. A set whose median English share is under `ENGLISH_AUTHOR_SHARE` runs no language check, and `test_other_language_follows_the_authors_set` (`skill/revoice/tests/test_review_samples.py:213`) pins that a German-only set is kept. What is missing is only dropping stray off-language samples from a non-English author's set. T2 says "at least one non-English language chosen in the refine" and names none.
+2. **T2 size and tier.** "Per-language word lists plus dominant-language detection" is open-ended; it adds a data table and changes `review()` and `english_share`. FUNCTION_WORDS is also used by `other_name` (line ~222) and must stay English.
+### Advisory observations (2)
+- T1 holds: `TABLE` at line 80 is `\|.*\|?`, so one pipe matches; `is_structured` (line 156) is its only user. The one-pipe case needs a line that is otherwise prose; `test_single_list_line_is_not_a_list` (line 159) is the pattern to follow.
+- Parallel exception checked: File scope (`review-samples.py`, `test_review_samples.py`) shares no file with plan 4 (`test_plugin_manifest.py`, `.claude-plugin/*`) or plan 6 (`sync.py`, `test_sync.py`), and `gh pr list --state open` returned no PRs. No VISION.md in this repo.
+### Verification context
+- Code repo: revoice-skill at e645a86. Plan written: 2026-10-29. Commits reviewed since: 0 (file last changed in 9b3cbd5, before the plan)
+- Tasks: 2 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 6. Discovery searches: ENGLISH_SHARE, TABLE, english_share, FUNCTION_WORDS, test_review_samples language tests
+- Failure modes: none apply: local offline text filtering, no network, login, money, deploy or client data
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-29, answers round)
+### Auto-applied corrections (1)
+1. T2 tier stays `senior` and the design is confirmed (per-language share table, dominant language = highest median share reaching `ENGLISH_AUTHOR_SHARE`, drop samples under `ENGLISH_SHARE` in that language; `FUNCTION_WORDS` stays English for `other_name`). Source: EST-3210 Q2, evidence `review-samples.py:249-250`, `:226`. No text change needed.
+### Items needing user confirmation (1)
+1. Which non-English language(s) T2 covers, or drop T2. Asked on EST-3208.
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at e645a86. Plan written: 2026-10-29. Commits reviewed since: 0
+- Tasks: 2 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 3. Discovery searches: none new
+- Failure modes: none apply: local offline text filtering
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-29, owner answer)
+### Auto-applied corrections (1)
+1. Owner chose "German only" for T2 on EST-3208 (card ab8ba785). T2 and the language acceptance criterion now name German; the other languages are filed as a new technical-debt row (Source `paperclip-cto`, section "From: refine/epic-5" in `.planning/technical-debt/README.md`).
+### Items needing user confirmation (0)
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at e645a86. Plan written: 2026-10-29. Commits reviewed since: 0
+- Tasks: 2 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 0 new. Discovery searches: none new
+- Failure modes: none apply: local offline text filtering
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
