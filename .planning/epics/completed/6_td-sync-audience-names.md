@@ -29,8 +29,8 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Acceptance criteria
 
-- [ ] An audience containing a path separator or `..` is rejected and nothing is written outside the voices dir.
-- [ ] CI is green.
+- [x] An audience containing a path separator or `..` is rejected and nothing is written outside the voices dir. _(verified 2026-10-29: skill/revoice/tests/test_sync.py `test_audience_that_is_not_a_plain_name_is_refused` covers `../x`, `a/b`, `a\b`, `..`, `.`, `` and asserts exit 1, INVALID lines, only the expected files in the assets dir and no fetch for a bad audience; sync.py `plain_name` check in the audience loop; runs on a fake SilverBullet in the test)_
+- [x] CI is green. _(verified 2026-10-29: CI run 40806791883 on main at 1e23fd2 succeeded; 123 tests pass locally)_
 
 ## Repo rules
 
