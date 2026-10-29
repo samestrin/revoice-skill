@@ -20,17 +20,19 @@ def read_json(name: str) -> dict:
     return json.loads((PLUGIN_DIR / name).read_text(encoding="utf-8"))
 
 
-def newest_released_version() -> str:
+def newest_released_version(text: str | None = None) -> str:
     """The first `## [x.y.z]` heading in CHANGELOG.md, skipping Unreleased."""
-    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    if text is None:
+        text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     match = re.search(r"^## \[(\d+\.\d+\.\d+)\]", text, re.M)
     if not match:
         raise AssertionError("CHANGELOG.md has no released `## [x.y.z]` heading")
     return match.group(1)
 
 
-def skill_md_version() -> str:
-    text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+def skill_md_version(text: str | None = None) -> str:
+    if text is None:
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
     front = re.match(r"^---\n(.*?)\n---\n", text, re.S)
     if not front:
         raise AssertionError("SKILL.md has no frontmatter")
