@@ -61,7 +61,10 @@ class PluginJsonTest(unittest.TestCase):
         self.assertEqual(self.plugin["version"], newest_released_version())
 
     def test_version_matches_skill_md(self):
-        self.assertEqual(self.plugin["version"], skill_md_version())
+        version = skill_md_version()
+        # A quote left on the value would still be a mismatch, but say so.
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+        self.assertEqual(self.plugin["version"], version)
 
 
 class MarketplaceJsonTest(unittest.TestCase):
@@ -84,8 +87,22 @@ class MarketplaceJsonTest(unittest.TestCase):
 
 
 class HelpersTest(unittest.TestCase):
-    def test_skill_md_version_reads_quoted_value(self):
-        self.assertRegex(skill_md_version(), r"^\d+\.\d+\.\d+$")
+    """Each guard raises on bad input, so a broken file fails loudly."""
+
+    def test_changelog_without_released_heading(self):
+        text = "# Changelog\n\n## [Unreleased]\n\n- something\n"
+        with self.assertRaisesRegex(AssertionError, "no released"):
+            newest_released_version(text)
+
+    def test_skill_md_without_frontmatter(self):
+        text = "# revoice\n\nmetadata:\n  version: 1.0.0\n"
+        with self.assertRaisesRegex(AssertionError, "no frontmatter"):
+            skill_md_version(text)
+
+    def test_skill_md_without_metadata_version(self):
+        text = "---\nname: revoice\nmetadata:\n  author: someone\n---\n# revoice\n"
+        with self.assertRaisesRegex(AssertionError, "no metadata.version"):
+            skill_md_version(text)
 
 
 if __name__ == "__main__":
