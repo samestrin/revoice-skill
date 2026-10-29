@@ -49,15 +49,24 @@ MIN_SHINGLES = 8  # shorter samples (a one-line reply) can repeat honestly
 MAX_SHINGLES = 500  # shingles looked at per sample
 BUCKET = 50  # samples remembered per shingle
 DUPLICATE_OVERLAP = 0.7
-# Language: share of common English function words.
+# Language: share of common function words of the author's language (see LANGUAGE_WORDS).
 MIN_LANGUAGE_WORDS = 20
-ENGLISH_SHARE = 0.12  # below this a sample does not look English
+ENGLISH_SHARE = 0.12  # below this a sample does not look like the author's language
 ENGLISH_AUTHOR_SHARE = 0.2  # the set's median must reach this for the check to run
 
 FUNCTION_WORDS = frozenset(
     "the a an and or but of to in on at for with from by as is are was were be been it this "
     "that these those i you he she we they my your our their me us them not no if so do does "
     "did have has had will would can could should there what which who when about".split())
+GERMAN_FUNCTION_WORDS = frozenset(
+    "der die das den dem des ein eine einen einem einer eines und oder aber von zu zum zur in "
+    "im an am auf aus bei mit nach für über um ist sind war waren sein bin bist hat haben habe "
+    "hatte wird werden wurde es ich du er sie wir ihr mich mir dich dir uns euch ihn ihm ihnen "
+    "nicht kein keine wenn dass ob als wie was wer wo auch noch nur schon sehr doch da hier "
+    "mein dein unser kann können muss müssen soll sollte will würde weil".split())
+# The author's language is the one with the highest median share; English wins a tie.
+# FUNCTION_WORDS stays English: other_name uses it to tell a name from an ordinary word.
+LANGUAGE_WORDS = {"english": FUNCTION_WORDS, "german": GERMAN_FUNCTION_WORDS}
 DANGLING = frozenset(
     "the a an and or but of to in on at for with from by as is are was were be that this "
     "which who if so than then because my your our their his her its".split())
@@ -201,9 +210,26 @@ def find_duplicates(texts: list[str], stats: dict | None = None) -> set[int]:
     return dups
 
 
-def english_share(text: str) -> float:
-    ws = words(text)
-    return sum(w in FUNCTION_WORDS for w in ws) / len(ws) if ws else 0.0
+def language_share(text: str, language: str) -> float:
+    ws, common = words(text), LANGUAGE_WORDS[language]
+    return sum(w in common for w in ws) / len(ws) if ws else 0.0
+
+
+def author_language(texts: list[str]) -> str | None:
+    """The language with the highest median share over the samples long enough to judge.
+
+    None when no language reaches ENGLISH_AUTHOR_SHARE, and then no sample is
+    dropped for its language.
+    """
+    long = [t for t in texts if len(words(t)) >= MIN_LANGUAGE_WORDS]
+    if not long:
+        return None
+    medians = {}
+    for language in LANGUAGE_WORDS:
+        shares = sorted(language_share(t, language) for t in long)
+        medians[language] = shares[len(shares) // 2]
+    best = max(medians, key=medians.get)  # the first, English, on a tie
+    return best if medians[best] >= ENGLISH_AUTHOR_SHARE else None
 
 
 def signoff_name(text: str) -> str:
@@ -246,8 +272,7 @@ def score(text: str) -> int:
 def review(texts: list[str], author: str = "") -> list[dict]:
     """Return one {verdict, score, reason} dict per text, in order."""
     dups = find_duplicates(texts)
-    shares = sorted(english_share(t) for t in texts if len(words(t)) >= MIN_LANGUAGE_WORDS)
-    english_set = bool(shares) and shares[len(shares) // 2] >= ENGLISH_AUTHOR_SHARE
+    language = author_language(texts)
     out = []
     for i, t in enumerate(texts):
         if is_broken(t):
@@ -260,7 +285,8 @@ def review(texts: list[str], author: str = "") -> list[dict]:
             reason = "broken extraction"
         elif i in dups:
             reason = "form letter"
-        elif english_set and len(words(t)) >= MIN_LANGUAGE_WORDS and english_share(t) < ENGLISH_SHARE:
+        elif (language and len(words(t)) >= MIN_LANGUAGE_WORDS
+              and language_share(t, language) < ENGLISH_SHARE):
             reason = "not in the author's language"
         elif other_name(t, author):
             reason = "written in another name"
