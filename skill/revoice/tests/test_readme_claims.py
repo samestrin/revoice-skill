@@ -55,8 +55,44 @@ class TestReadmeLocalReview(unittest.TestCase):
         self.assertIn("reviews them on your machine", self.text)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TestReadmePluginInstall(unittest.TestCase):
+    """Epic 3: the plugin is the main install; copy-folder is the second option."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = README.read_text(encoding="utf-8")
+        start = cls.text.index("## 1. Install the skill")
+        cls.install = cls.text[start:cls.text.index("## 2. ", start)]
+
+    def test_plugin_commands_are_the_main_install(self):
+        self.assertIn("/plugin marketplace add samestrin/revoice-skill", self.install)
+        self.assertIn("/plugin install revoice@revoice-skill", self.install)
+        plugin_pos = self.install.index("/plugin marketplace add")
+        copy_pos = self.install.index("copy the skill folder")
+        self.assertLess(plugin_pos, copy_pos)
+
+    def test_copy_folder_is_the_second_option(self):
+        self.assertIn("Alternative: copy the folder", self.install)
+        self.assertIn("~/.claude/skills", self.install)
+
+    def test_command_is_bare_revoice(self):
+        self.assertIn("The command is `/revoice`.", self.install)
+
+    def test_voices_location_documented(self):
+        self.assertIn("~/.config/revoice/voices/", self.text)
+        self.assertNotIn("your voice files in `assets/`", self.text)
+
+    def test_switching_note(self):
+        self.assertIn("Switching from the copy-folder install to the plugin", self.install)
+        start = self.install.index("Switching from the copy-folder install")
+        note = self.install[start:self.install.index("\n", start)]
+        self.assertIn("~/.config/revoice/voices/", note)
+        self.assertIn("delete `~/.claude/skills/revoice/`", note)
+        self.assertIn("takes the bare `/revoice` command", note)
+
+    def test_update_and_uninstall_through_plugin(self):
+        self.assertIn("/plugin update revoice@revoice-skill", self.text)
+        self.assertIn("/plugin uninstall revoice@revoice-skill", self.text)
 
 
 if __name__ == "__main__":
