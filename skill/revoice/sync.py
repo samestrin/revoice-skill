@@ -37,6 +37,11 @@ def fetch(sb_url: str, note: str) -> bytes | None:
         raise
 
 
+def plain_name(name: str) -> bool:
+    """True if name is safe to use as part of a file name inside VOICES."""
+    return name not in ("", ".", "..") and "/" not in name and "\\" not in name
+
+
 def write(path: str, data: bytes) -> None:
     tmp = path + ".tmp"
     with open(tmp, "wb") as f:
@@ -77,7 +82,7 @@ def main() -> int:
         if only and slug != only:
             continue
         # The slug becomes a file name; a path in it would write outside VOICES.
-        if slug in ("", ".", "..") or "/" in slug or "\\" in slug:
+        if not plain_name(slug):
             print(f"INVALID  {slug}: a voice slug must be a plain file name")
             failed = True
             continue
@@ -91,6 +96,11 @@ def main() -> int:
         print(f"UPDATED  {slug}.md <- {base}")
         stem = base[:-3] if base.endswith(".md") else base
         for aud in audiences:
+            # The audience also becomes part of a file name.
+            if not plain_name(str(aud)):
+                print(f"INVALID  {aud}: an audience must be a plain file name")
+                failed = True
+                continue
             note = f"{stem} ({aud}).md"
             data = fetch(sb_url, note)
             if not data:
