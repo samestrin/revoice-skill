@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Plugin icon: `.claude-plugin/icon.png` (512x512 PNG) referenced by an `icon` key in `plugin.json`, which clears `ICON_MISSING` from `claude plugin validate`. A test checks the file exists, is a PNG, and is square within 512-2048 px and under 2 MB.
 - Claude Code plugin manifests: `.claude-plugin/plugin.json` (plugin `revoice`, version 0.1.0, skill loaded from `skill/`) and `.claude-plugin/marketplace.json` (marketplace `revoice-skill`), so the repo can be added as a plugin marketplace. A test keeps the plugin version equal to the newest released CHANGELOG version and `SKILL.md` `metadata.version`.
 - README install steps start with cloning the repository, and an Upgrading section documents the upgrade and uninstall commands for Windows and macOS/Linux.
 - README "Getting an API key" section: sign up at yourvoice.dev (250 free credits), create a key on the dashboard, save it to `~/.config/revoice/api-key`; notes that only `--build` uses it, that only the chosen samples leave the machine, and gives the work-folder delete commands. The requirements note now says only `--sync` needs PyYAML.
