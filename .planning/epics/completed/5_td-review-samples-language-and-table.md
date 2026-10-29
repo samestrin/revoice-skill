@@ -30,9 +30,9 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Acceptance criteria
 
-- [ ] A prose line with a single `|` is not counted as table-like.
-- [ ] A German author's samples get a language filter (other languages are tracked in a technical-debt row).
-- [ ] CI is green.
+- [x] A prose line with a single `|` is not counted as table-like. _(verified 2026-10-29: `test_table_needs_two_pipes` in skill/revoice/tests/test_review_samples.py; TABLE at review-samples.py:89; CI green on 9f55f37)_
+- [x] A German author's samples get a language filter (other languages are tracked in a technical-debt row). _(verified 2026-10-29: `test_german_author_drops_a_stray_english_sample`, review-samples.py `author_language`; other languages tracked in the epic 5 debt row; CI green on 13290f7)_
+- [x] CI is green. _(verified 2026-10-29: CI runs 40896430386 and 40899772306 on main succeeded)_
 
 ## Repo rules
 
