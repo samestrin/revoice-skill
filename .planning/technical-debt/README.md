@@ -2,6 +2,12 @@
 
 Small technical debt items found during development.
 
+### [2026-10-29] From: refine/epic-5
+
+| Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
+|-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
+| 1 | [ ] | LOW | skill/revoice/build/review-samples.py:FUNCTION_WORDS | Epic 5 adds a language filter for German only; authors writing in Spanish, French or other languages still get no filter for stray off-language samples. | Add function-word lists for the further languages. | feature | 20 | paperclip-cto | 0 |
+
 ### [2026-10-29] From: epic 3
 
 | Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
