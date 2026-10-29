@@ -55,3 +55,18 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 - Failure modes: none apply: local offline text filtering, no network, login, money, deploy or client data
 - Vision fit: no VISION.md
 <!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-29, answers round)
+### Auto-applied corrections (1)
+1. T2 tier stays `senior` and the design is confirmed (per-language share table, dominant language = highest median share reaching `ENGLISH_AUTHOR_SHARE`, drop samples under `ENGLISH_SHARE` in that language; `FUNCTION_WORDS` stays English for `other_name`). Source: EST-3210 Q2, evidence `review-samples.py:249-250`, `:226`. No text change needed.
+### Items needing user confirmation (1)
+1. Which non-English language(s) T2 covers, or drop T2. Asked on EST-3208.
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at e645a86. Plan written: 2026-10-29. Commits reviewed since: 0
+- Tasks: 2 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 3. Discovery searches: none new
+- Failure modes: none apply: local offline text filtering
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
