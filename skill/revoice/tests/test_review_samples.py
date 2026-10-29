@@ -160,6 +160,15 @@ class Rules(unittest.TestCase):
         self.assertEqual(self.judge("- eggs")["verdict"], "KEEP")
         self.assertEqual(self.judge("- eggs\n- milk")["reason"], "list, table, code or log")
 
+    def test_table_needs_two_pipes(self):
+        prose = ("Please pick either the red | the blue folder for the files.\n"
+                 "Then send me the signed form | by next Friday if you can.")
+        self.assertTrue(rs.TABLE.search("name | role | team"))
+        self.assertIsNone(rs.TABLE.search("pick the red | the blue one"))
+        self.assertEqual(self.judge(prose)["verdict"], "KEEP")
+        rows = "| name | role |\n| Alex | lead |\n| Sam | dev |"
+        self.assertEqual(self.judge(rows)["reason"], "list, table, code or log")
+
     def test_short_repeats_kept_longer_repeats_dropped(self):
         eleven = "Please send the signed form back to me by next Friday."  # 7 shingles
         twelve = "Please send the signed form back to me by next Friday morning."  # 8 shingles

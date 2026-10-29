@@ -77,7 +77,7 @@ BOILERPLATE = re.compile(
     r"confidential|intended (only )?for the|unsubscribe|privacy (notice|policy)|"
     r"disclaimer|this (e-?mail|message) and any attachments|if you are not the intended", re.I)
 BULLET = re.compile(r"^\s*([-*\u2022\u25cf]|\d{1,3}[.)])\s+\S")
-TABLE = re.compile(r"\|.*\|?|\t\S.*\t|\S {3,}\S.* {3,}\S")
+TABLE = re.compile(r"\|.*\||\t\S.*\t|\S {3,}\S.* {3,}\S")
 CODE = re.compile(r"^(\t| {4})\s*\S|^\s*(def |class |import |from \S+ import |#include|\$ |```)|[{};]\s*$")
 LOG = re.compile(
     r"^\s*\[?(\d{4}-\d\d-\d\d[ T]\d\d:\d\d|\d\d:\d\d:\d\d|"
