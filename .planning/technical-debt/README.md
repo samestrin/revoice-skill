@@ -13,7 +13,6 @@ Small technical debt items found during development.
 | Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
 |-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
 | 2 | [ ] | LOW | .gitignore:1 | `.claude/settings.local.json` is not ignored, so it shows up as untracked. | Add `.claude/settings.local.json` to `.gitignore`. | config | 5 | paperclip-reviewer | 0 |
-| 3 | [/] | LOW | skill/revoice/sync.py:main | The audience names from the config are not validated, so an `audiences` entry containing `/` writes outside the voices dir. | Apply the same plain-file-name check to each audience. → epic 6 | correctness | 10 | paperclip-builder | 0 |
 | 3 | [ ] | LOW | CHANGELOG.md:17 | The Unreleased `Voice profiles now live` entry is longer than the one-or-two-sentence limit. | Shorten it to two sentences. | docs | 10 | paperclip-reviewer | 0 |
 | 3 | [ ] | LOW | skill/revoice/SKILL.md:115 | `python3 ${CLAUDE_SKILL_DIR}/sync.py` is unquoted, and the `allowed-tools` pattern matches the unquoted form, so a skill path with spaces breaks. | Quote the path in the command and in `allowed-tools`. | correctness | 15 | paperclip-reviewer | 0 |
 
@@ -33,4 +32,4 @@ Small technical debt items found during development.
 | CRITICAL | 0 | 0 | 0 |
 | HIGH | 0 | 0 | 0 |
 | MEDIUM | 0 | 0 | 0 |
-| LOW | 6 | 3 | 0 |
+| LOW | 6 | 2 | 0 |
