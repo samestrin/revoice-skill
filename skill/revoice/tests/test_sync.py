@@ -129,6 +129,18 @@ class SyncTest(unittest.TestCase):
         self.assertFalse((self.dir / "escape.md").exists())
         self.assertNotIn(("http://sb.test/", "Voices/Alex.md"), self.fetched)
 
+    def test_audience_that_is_not_a_plain_name_is_refused(self):
+        bad = ["../x", "a/b", "a\\b", "..", ".", ""]
+        self.cfg["audiences"] = bad + ["work"]
+        self.notes.update({f"Voices/Alex ({a}).md": b"evil" for a in bad})
+        code, out, _ = self.run_sync("alex")
+        self.assertEqual(code, 1)
+        for a in bad:
+            self.assertIn(f"INVALID  {a}:", out)
+        self.assertEqual(sorted(os.listdir(self.assets)), ["alex-work.md", "alex.md"])
+        self.assertFalse((self.dir / "x.md").exists())
+        self.assertFalse(any(f"({a})" in note for _, note in self.fetched for a in bad))
+
     def test_missing_config_is_a_clear_error(self):
         self.config.unlink()
         code, _, err = self.run_sync()
