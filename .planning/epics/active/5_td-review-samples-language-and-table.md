@@ -38,3 +38,20 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 - Never run `deploy.sh`; never write to `~/.claude/skills/` or `~/.agents/skills/`.
 - Every task ends green on `python3 -m unittest discover -s skill/revoice/tests`, never by weakening or deleting a test.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-29)
+### Auto-applied corrections (0)
+### Items needing user confirmation (2)
+1. **T2 scope: which languages, and is it worth doing.** Current State is partly stale: `review()` (`skill/revoice/build/review-samples.py:247-250`) already follows the author's set. A set whose median English share is under `ENGLISH_AUTHOR_SHARE` runs no language check, and `test_other_language_follows_the_authors_set` (`skill/revoice/tests/test_review_samples.py:213`) pins that a German-only set is kept. What is missing is only dropping stray off-language samples from a non-English author's set. T2 says "at least one non-English language chosen in the refine" and names none.
+2. **T2 size and tier.** "Per-language word lists plus dominant-language detection" is open-ended; it adds a data table and changes `review()` and `english_share`. FUNCTION_WORDS is also used by `other_name` (line ~222) and must stay English.
+### Advisory observations (2)
+- T1 holds: `TABLE` at line 80 is `\|.*\|?`, so one pipe matches; `is_structured` (line 156) is its only user. The one-pipe case needs a line that is otherwise prose; `test_single_list_line_is_not_a_list` (line 159) is the pattern to follow.
+- Parallel exception checked: File scope (`review-samples.py`, `test_review_samples.py`) shares no file with plan 4 (`test_plugin_manifest.py`, `.claude-plugin/*`) or plan 6 (`sync.py`, `test_sync.py`), and `gh pr list --state open` returned no PRs. No VISION.md in this repo.
+### Verification context
+- Code repo: revoice-skill at e645a86. Plan written: 2026-10-29. Commits reviewed since: 0 (file last changed in 9b3cbd5, before the plan)
+- Tasks: 2 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 6. Discovery searches: ENGLISH_SHARE, TABLE, english_share, FUNCTION_WORDS, test_review_samples language tests
+- Failure modes: none apply: local offline text filtering, no network, login, money, deploy or client data
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
