@@ -36,3 +36,19 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 - Never run `deploy.sh`; never write to `~/.claude/skills/` or `~/.agents/skills/`.
 - Every task ends green on `python3 -m unittest discover -s skill/revoice/tests`, never by weakening or deleting a test.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-29)
+### Auto-applied corrections (0)
+### Items needing user confirmation (0)
+### Advisory observations (2)
+- `sync.py` line numbers drifted by one or two (slug check is at lines 80-83, the audience loop at 93-100); the plan's `~` markers cover it and the symbols each match once.
+- An invalid audience is checked inside the per-voice loop, so with several voices its `INVALID` line prints once per voice. Acceptable; the builder may hoist the check above the loop if the test stays simple. `--slug` runs and the empty string `""` should follow the same rule as the slug check (`sync.py:80`).
+### Verification context
+- Code repo: revoice-skill at e645a86. Plan written: 2026-10-29. Commits reviewed since: 0 (only `9260d47` touched `sync.py`, before the plan).
+- Tasks: 1 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 5 (slug check exists at sync.py:80; audience loop builds `{slug}-{aud}.md` from raw config at :99; test_sync.py has the matching slug test at :122; no test for audiences; tests dir path). Discovery searches: `INVALID`, `audiences`, `os.path.join(VOICES`
+- Parallel check (technical-debt exception): File scope `skill/revoice/sync.py`, `skill/revoice/tests/test_sync.py` shares no file with epic 4 (`test_plugin_manifest.py`, `.claude-plugin/*`) or epic 5 (`review-samples.py`, `test_review_samples.py`); `gh pr list --state open` is empty. Scope not widened.
+- Failure modes: input forms checked: `/`, `\`, `..`, `.`, `""` in the audience, same set as the slug check at sync.py:80. Nothing else applies (no network route, money or deploy; the fetch is to the owner's SilverBullet URL and unchanged).
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
