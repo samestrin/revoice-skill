@@ -10,5 +10,6 @@
   "repository": "https://github.com/samestrin/revoice-skill",
   "license": "MIT",
   "keywords": ["writing", "voice", "rewrite", "style"],
+  "icon": ".claude-plugin/icon.png",
   "skills": "./skill"
 }
