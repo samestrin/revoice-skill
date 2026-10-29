@@ -30,10 +30,10 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Acceptance criteria
 
-- [ ] Each of the three guards has a test that feeds it bad input.
-- [ ] The repeated test is dropped or folded in.
-- [ ] `plugin.json` references a square PNG icon (512-2048 px, under 2 MB) that exists, and a test pins it; `claude plugin validate . --strict` no longer reports `ICON_MISSING`.
-- [ ] CI is green.
+- [x] Each of the three guards has a test that feeds it bad input. _(verified 2026-10-29: `HelpersTest.test_changelog_without_released_heading`, `test_skill_md_without_frontmatter`, `test_skill_md_without_metadata_version` in skill/revoice/tests/test_plugin_manifest.py, each feeding one guard bad text; CI green on b4b7eb4 (Python 3.10 and 3.11))_
+- [x] The repeated test is dropped or folded in. _(verified 2026-10-29: `test_skill_md_version_reads_quoted_value` is gone; its regex assertion is now in `test_version_matches_skill_md` (test_plugin_manifest.py:94-97))_
+- [x] `plugin.json` references a square PNG icon (512-2048 px, under 2 MB) that exists, and a test pins it; `claude plugin validate . --strict` no longer reports `ICON_MISSING`. _(verified 2026-10-29: `.claude-plugin/plugin.json:13` has `"icon": ".claude-plugin/icon.png"`; `test_icon_is_a_square_png_in_range` and `test_icon_rejects_bad_files` pin it (green in CI on b4b7eb4); `claude plugin validate . --strict` run on main 2026-10-29: "Validation passed", nothing to report)_
+- [x] CI is green. _(verified 2026-10-29: CI run on main at b4b7eb4: success)_
 
 ## Repo rules
 
