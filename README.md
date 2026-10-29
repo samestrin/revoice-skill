@@ -43,7 +43,18 @@ Every request needs your key in an `X-API-Key` header. The build already points 
 
 ## 1. Install the skill
 
-You copy the skill folder into Claude Code's skills folder. First get the repository (the same commands work in PowerShell, Terminal and any shell with git):
+The recommended way is the Claude Code plugin. In Claude Code, run these two commands:
+
+```
+/plugin marketplace add samestrin/revoice-skill
+/plugin install revoice@revoice-skill
+```
+
+Start a new Claude Code session so it picks up the skill. The command is `/revoice`. The first `/revoice --build` creates your config at `~/.config/revoice/config.yaml`, and your voice files live in `~/.config/revoice/voices/`, outside the plugin folder, so updating the plugin never deletes them.
+
+### Alternative: copy the folder
+
+You can also copy the skill folder into Claude Code's skills folder. First get the repository (the same commands work in PowerShell, Terminal and any shell with git):
 
 ```bash
 git clone https://github.com/samestrin/revoice-skill.git
@@ -66,7 +77,9 @@ mkdir -p ~/.claude/skills
 cp -R skill/revoice ~/.claude/skills/revoice
 ```
 
-Start a new Claude Code session so it picks up the skill. The first `/revoice --build` creates your config at `~/.config/revoice/config.yaml`.
+Start a new Claude Code session so it picks up the skill.
+
+**Switching from the copy-folder install to the plugin:** move your voice files from the copied folder's `assets/` to `~/.config/revoice/voices/`, then delete `~/.claude/skills/revoice/`. If you leave it there, it takes the bare `/revoice` command and the plugin's copy does not run.
 
 You can try the skill before building your own voice, with the fictional example voice that ships with it. No config is needed for this:
 
@@ -78,7 +91,21 @@ Until you have a config, always pass `--voice`: without it the skill does not kn
 
 ## Upgrading
 
-From the cloned repository folder, pull the latest version and copy the skill's files over the installed copy:
+With the plugin install, update through `/plugin`:
+
+```
+/plugin update revoice@revoice-skill
+```
+
+To uninstall:
+
+```
+/plugin uninstall revoice@revoice-skill
+```
+
+Your voice files in `~/.config/revoice/voices/` and your config and API key under `~/.config/revoice/` are not touched by an update or uninstall. Start a new Claude Code session to pick up the new version.
+
+With the copy-folder install, from the cloned repository folder, pull the latest version and copy the skill's files over the installed copy:
 
 Windows (PowerShell):
 
@@ -94,9 +121,7 @@ git pull
 cp -R skill/revoice/. ~/.claude/skills/revoice/
 ```
 
-This overwrites the skill's files and keeps everything that is yours: your voice files in `assets/`, and your config and API key under `~/.config/revoice/`. Start a new Claude Code session to pick up the new version.
-
-To uninstall, delete the `revoice` folder from `~/.claude/skills/` (and `~/.config/revoice/` if you also want to remove your config and API key).
+To uninstall the copy-folder install, delete the `revoice` folder from `~/.claude/skills/`. Either way, delete `~/.config/revoice/` too if you also want to remove your voice files, config and API key.
 
 ## 2. Save your API key
 
@@ -127,7 +152,7 @@ Then, in Claude Code:
 /revoice --build
 ```
 
-Claude asks for the `.mbox` path, the addresses you send from, your name, and a few defaults, then does the rest: filtering, extracting, reviewing the samples on your machine, building the profile, and writing your voice file. Claude Code asks you to approve when it saves the voice file into the skill folder. At the end it rewrites a sample email so you can see the result.
+Claude asks for the `.mbox` path, the addresses you send from, your name, and a few defaults, then does the rest: filtering, extracting, reviewing the samples on your machine, building the profile, and writing your voice file. Claude Code asks you to approve when it saves the voice file to `~/.config/revoice/voices/`. At the end it rewrites a sample email so you can see the result.
 
 You can also give the answers up front:
 
@@ -135,7 +160,7 @@ You can also give the answers up front:
 /revoice --build mbox=C:\Users\you\Downloads\Sent.mbox from=you@example.com,you@work.com name="Your Name"
 ```
 
-Read the voice file it wrote (`assets/<your-slug>.md` in the skill folder) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
+Read the voice file it wrote (`~/.config/revoice/voices/<your-slug>.md`) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
 **What leaves your machine.** The full mailbox never does. The build pulls out up to 200 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The KEEP/DROP review runs on your machine and sends nothing anywhere. To build the profile, the text analysis API gets, over HTTPS, only the kept samples (up to the 200 extracted, sent in batches of 100; the fingerprint step uses at most 100 of them) plus the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The reference set is on by default; answer no to it in the build questions to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. Rewriting text with `/revoice` never touches the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
 
@@ -157,7 +182,7 @@ macOS or Linux: `rm -rf ~/revoice-build/<your-slug>`
 
 The skill keeps every fact, number, name and ask from the input. It does not add new ones.
 
-**Tuning.** To change how it writes, edit your voice file, for example by adding a line to its "Do not" section. To tune one audience, create `assets/<slug>-formal.md` next to it with only the differences (for example "no idioms, sign off with Regards,"). It adds to your voice file rather than replacing it. Without one, the skill uses its own built-in steering for that audience.
+**Tuning.** To change how it writes, edit your voice file, for example by adding a line to its "Do not" section. To tune one audience, create `~/.config/revoice/voices/<slug>-formal.md` next to it with only the differences (for example "no idioms, sign off with Regards,"). It adds to your voice file rather than replacing it. Without one, the skill uses its own built-in steering for that audience.
 
 ## Running the steps by hand
 
