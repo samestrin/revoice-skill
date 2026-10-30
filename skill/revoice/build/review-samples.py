@@ -64,9 +64,24 @@ GERMAN_FUNCTION_WORDS = frozenset(
     "hatte wird werden wurde es ich du er sie wir ihr mich mir dich dir uns euch ihn ihm ihnen "
     "nicht kein keine wenn dass ob als wie was wer wo auch noch nur schon sehr doch da hier "
     "mein dein unser kann können muss müssen soll sollte will würde weil".split())
+SPANISH_FUNCTION_WORDS = frozenset(
+    "el la lo los las un una unos unas y e o u pero de del a al en con por para sin sobre "
+    "entre hasta desde es son era eran fue ser estar está están estaba hay ha han he has "
+    "tengo tiene tienen yo tú él ella nosotros ellos ellas me te se nos le les mi mis tu tus "
+    "su sus no ni si que qué como cuando donde porque muy más ya también este esta esto ese "
+    "esa eso todo puede quiero voy va".split())
+FRENCH_FUNCTION_WORDS = frozenset(
+    "le la les un une des du de et ou mais à au aux en dans sur sous avec pour par sans chez "
+    "est sont était être ai as a avons avez ont je tu il elle on nous vous ils elles me te se "
+    "moi toi lui leur mon ma mes ton ta tes son sa ses notre votre ne pas plus que qui si "
+    "comme quand où parce ce cette ces très aussi bien y peux peut veux vais va".split())
 # The author's language is the one with the highest median share; English wins a tie.
 # FUNCTION_WORDS stays English: other_name uses it to tell a name from an ordinary word.
-LANGUAGE_WORDS = {"english": FUNCTION_WORDS, "german": GERMAN_FUNCTION_WORDS}
+# Spanish and French share many short words (de, la, que, se...); only the words that tell
+# them apart count, or a stray sample in one would pass in the other.
+LANGUAGE_WORDS = {"english": FUNCTION_WORDS, "german": GERMAN_FUNCTION_WORDS,
+                  "spanish": SPANISH_FUNCTION_WORDS - FRENCH_FUNCTION_WORDS,
+                  "french": FRENCH_FUNCTION_WORDS - SPANISH_FUNCTION_WORDS}
 DANGLING = frozenset(
     "the a an and or but of to in on at for with from by as is are was were be that this "
     "which who if so than then because my your our their his her its".split())
