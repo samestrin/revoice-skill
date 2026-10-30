@@ -30,9 +30,9 @@ Only the files in the File scope line. Only the language constants and function-
 
 ## Acceptance criteria
 
-- [ ] The share constants carry language-neutral names.
-- [ ] Spanish and French authors get the language filter.
-- [ ] CI is green.
+- [x] The share constants carry language-neutral names. _(verified 2026-10-30: `LANGUAGE_SHARE`/`LANGUAGE_AUTHOR_SHARE` at review-samples.py:54-55, no `ENGLISH_*` left in `skill`; test_review_samples.py `test_share_constants_have_language_neutral_names`, green in CI on main)_
+- [x] Spanish and French authors get the language filter. _(verified 2026-10-30: `LANGUAGE_WORDS` has spanish/french at review-samples.py:~80; `test_spanish_and_french_authors_drop_stray_samples` and `test_english_and_german_authors_drop_spanish_and_french`, green in CI on main)_
+- [x] CI is green. _(verified 2026-10-30: CI success on main for #54 (run 40990173873) and #55 (run 40991938210); 130 tests pass locally)_
 
 ## Repo rules
 
