@@ -36,3 +36,18 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 - Never run `deploy.sh`; never write to `~/.claude/skills/` or `~/.agents/skills/`.
 - Every task ends green on `python3 -m unittest discover -s skill/revoice/tests`, never by weakening or deleting a test.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-30)
+### Auto-applied corrections (0)
+### Items needing user confirmation (0)
+### Advisory observations (1)
+- `skill/revoice/SKILL.md:5` also lists `Bash(test:*)` twice. It is outside this row and the plan, so T1 leaves it alone.
+### Verification context
+- Code repo: revoice-skill at f49e9a5. Plan written: 2026-10-30. Commits reviewed since: 0 (the last change to either file is 0f3a807, before the plan)
+- Tasks: 1 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 6. SKILL.md:5 has both sync patterns plus `Bash(python:*)` and `Bash(python3:*)`; test_skill_md.py:179-180 asserts the two sync patterns; test_skill_md.py:175 pins the quoted Step 6 command; SKILL.md:115 is that command; both files exist; the row is not stale. Discovery searches: `rg sync.py` in SKILL.md and test_skill_md.py, `rg allowed_tools` in the tests
+- Parallel check: the scope (SKILL.md, test_skill_md.py) is named by no other plan in `.planning/epics/active/` (4, 6, 11, 12) and by no open PR (`gh pr list` is empty).
+- Failure modes: none apply: the change removes two allow-list entries that the generic python patterns already cover; no route, login, money, data or deploy.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
