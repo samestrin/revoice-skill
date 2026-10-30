@@ -31,14 +31,6 @@ Small technical debt items found during development.
 | Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
 |-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
 | 2 | [ ] | LOW | .gitignore:1 | `.claude/settings.local.json` is not ignored, so it shows up as untracked. | Add `.claude/settings.local.json` to `.gitignore`. | config | 5 | paperclip-reviewer | 0 |
-| 3 | [/] | LOW | CHANGELOG.md:17 | The Unreleased `Voice profiles now live` entry is longer than the one-or-two-sentence limit. | Shorten it to two sentences. → epic 7 | docs | 10 | paperclip-reviewer | 0 |
-
-### [2026-10-28] From: epic 2.1
-
-| Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
-|-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
-| 1 | [/] | LOW | CHANGELOG.md:19 | Unreleased has two `### Changed` headings. | Merge the second entry into the first `### Changed` block. → epic 7 | docs | 5 | paperclip-reviewer | 0 |
-| 1 | [/] | LOW | CHANGELOG.md:25 | The Unreleased `### Fixed` entry still says Claude reads the extracted samples "to pick the best"; README.md:140 now says the review is local and Claude reads only the 15 `--top` profile samples. | Reword that clause to match the README. → epic 7 | docs | 10 | paperclip-reviewer | 0 |
 
 ## Stats
 
@@ -47,4 +39,4 @@ Small technical debt items found during development.
 | CRITICAL | 0 | 0 | 0 |
 | HIGH | 0 | 0 | 0 |
 | MEDIUM | 0 | 0 | 0 |
-| LOW | 3 | 5 | 0 |
+| LOW | 3 | 2 | 0 |
