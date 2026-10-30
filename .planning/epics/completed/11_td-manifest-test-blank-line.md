@@ -29,8 +29,8 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Acceptance criteria
 
-- [ ] One blank line separates the methods in `PluginJsonTest`.
-- [ ] CI is green.
+- [x] One blank line separates the methods in `PluginJsonTest`. _(verified 2026-10-30: `skill/revoice/tests/test_plugin_manifest.py:99-100` on main has one blank line before `test_icon_is_a_square_png_in_range`, commit 0de30cf)_
+- [x] CI is green. _(verified 2026-10-30: CI run 41001601683 on main at 0de30cf succeeded; 130 tests pass locally)_
 
 ## Repo rules
 
