@@ -176,8 +176,10 @@ class InstallPathTest(unittest.TestCase):
 
     def test_allowed_tools_use_skill_dir(self):
         tools = allowed_tools()
-        self.assertIn(f"Bash(python3 {SKILL_DIR}/sync.py:*)", tools)
-        self.assertIn(f"Bash(python {SKILL_DIR}/sync.py:*)", tools)
+        # The generic python patterns already cover sync.py.
+        self.assertNotIn("sync.py", ", ".join(tools))
+        self.assertIn("Bash(python:*)", tools)
+        self.assertIn("Bash(python3:*)", tools)
 
     def test_no_fallback_path(self):
         # ${CLAUDE_SKILL_DIR} is set in both installs; a second path would only drift.
