@@ -29,8 +29,8 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Acceptance criteria
 
-- [ ] The two sync-specific `allowed-tools` patterns are gone and the generic python patterns remain.
-- [ ] CI is green.
+- [x] The two sync-specific `allowed-tools` patterns are gone and the generic python patterns remain. _(verified 2026-10-30: skill/revoice/SKILL.md:5 on main af5cf53 has no `sync.py` entry and keeps `Bash(python:*)`, `Bash(python3:*)`; `test_allowed_tools_use_skill_dir` asserts both, 130 tests pass)_
+- [x] CI is green. _(verified 2026-10-30: CI run 41000515055 on main, success)_
 
 ## Repo rules
 
