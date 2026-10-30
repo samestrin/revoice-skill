@@ -244,6 +244,13 @@ class Rules(unittest.TestCase):
         self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP", "KEEP", "DROP"])
         self.assertEqual(rs.FUNCTION_WORDS, rs.LANGUAGE_WORDS["english"])
 
+    def test_share_constants_have_language_neutral_names(self):
+        # The thresholds apply to the author's language, whichever it is.
+        self.assertEqual(rs.LANGUAGE_SHARE, 0.12)
+        self.assertEqual(rs.LANGUAGE_AUTHOR_SHARE, 0.2)
+        self.assertFalse(hasattr(rs, "ENGLISH_SHARE"))
+        self.assertFalse(hasattr(rs, "ENGLISH_AUTHOR_SHARE"))
+
     def test_unknown_language_runs_no_check(self):
         spanish = ("Ayer hablé con el equipo y decidimos mover la publicación a la próxima semana, "
                    "porque todavía quedan algunos errores por corregir y las pruebas no terminaron.")
