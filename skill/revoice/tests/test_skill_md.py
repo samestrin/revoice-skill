@@ -171,7 +171,8 @@ class InstallPathTest(unittest.TestCase):
         self.assertIn(f"read `{SKILL_DIR}/build.md`", TEXT)
         self.assertIn(f"`{SKILL_DIR}/assets/<voice>.md`", skill_step(3))
         self.assertIn(f"`{SKILL_DIR}/assets/<voice>-<audience>.md`", skill_step(3))
-        self.assertIn(f"`python3 {SKILL_DIR}/sync.py`", skill_step(6))
+        # Quoted so a skill path with spaces stays one argument.
+        self.assertIn(f'`python3 "{SKILL_DIR}/sync.py"`', skill_step(6))
 
     def test_allowed_tools_use_skill_dir(self):
         tools = allowed_tools()
