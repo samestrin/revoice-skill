@@ -176,8 +176,6 @@ class InstallPathTest(unittest.TestCase):
 
     def test_allowed_tools_use_skill_dir(self):
         tools = allowed_tools()
-        self.assertIn(f"Bash(python3 {SKILL_DIR}/sync.py:*)", tools)
-        self.assertIn(f"Bash(python {SKILL_DIR}/sync.py:*)", tools)
         # The generic python patterns already cover sync.py.
         self.assertNotIn("sync.py", ", ".join(tools))
         self.assertIn("Bash(python:*)", tools)
