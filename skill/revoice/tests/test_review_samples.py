@@ -250,13 +250,36 @@ class Rules(unittest.TestCase):
         self.assertEqual(rs.LANGUAGE_AUTHOR_SHARE, 0.2)
         self.assertEqual([n for n in dir(rs) if n.startswith("ENGLISH_")], [])
 
+    def test_spanish_and_french_authors_drop_stray_samples(self):
+        for language, own, stray in (("spanish", SPANISH, FRENCH[0]), ("french", FRENCH, SPANISH[0])):
+            with self.subTest(language=language):
+                self.assertEqual(rs.author_language(own), language)
+                # An own-language set is all kept.
+                out = rs.review(own, AUTHOR)
+                self.assertEqual([o["verdict"] for o in out], ["KEEP"] * 3)
+                # A stray English sample, and one in the other language, are dropped.
+                for other in (FILLERS[0], stray):
+                    out = rs.review([*own, other], AUTHOR)
+                    self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP", "KEEP", "DROP"])
+                    self.assertEqual(out[3]["reason"], "not in the author's language")
+                # A short English line is too short to judge.
+                out = rs.review([*own, "Thanks, will do"], AUTHOR)
+                self.assertEqual([o["verdict"] for o in out], ["KEEP"] * 4)
+
+    def test_english_and_german_authors_drop_spanish_and_french(self):
+        for own in (FILLERS, [DROP_CASES[7][1], *GERMAN]):
+            for other in (SPANISH[0], FRENCH[0]):
+                out = rs.review([*own, other], AUTHOR)
+                self.assertEqual([o["verdict"] for o in out], ["KEEP", "KEEP", "KEEP", "DROP"])
+
     def test_unknown_language_runs_no_check(self):
-        spanish = ("Ayer hablé con el equipo y decidimos mover la publicación a la próxima semana, "
-                   "porque todavía quedan algunos errores por corregir y las pruebas no terminaron.")
-        other = ("Mañana voy a llamar al cliente para explicarle el retraso y luego te cuento "
-                 "qué dijo, pero creo que lo va a entender sin problema porque ya lo sabía.")
-        self.assertIsNone(rs.author_language([spanish, other]))
-        out = rs.review([spanish, other, FILLERS[0]], AUTHOR)
+        # Spanish was the unknown language here until it got a word list; Finnish has none.
+        finnish = ("Puhuin eilen tiimin kanssa ja päätimme siirtää julkaisua ensi viikolle, "
+                   "koska muutama virhe on vielä korjaamatta eikä testaus ole valmis.")
+        other = ("Soitan huomenna asiakkaalle ja kerron viivästyksestä, sitten kerron sinulle "
+                 "mitä hän sanoi, mutta luulen että hän ymmärtää sen hyvin koska hän tiesi jo.")
+        self.assertIsNone(rs.author_language([finnish, other]))
+        out = rs.review([finnish, other, FILLERS[0]], AUTHOR)
         self.assertEqual([o["verdict"] for o in out], ["KEEP"] * 3)
 
 
@@ -265,6 +288,24 @@ GERMAN = [
     "allein bleiben soll und es ihm gut tut.",
     "Kannst du mir bitte bis Freitag die Zahlen schicken, damit ich den Bericht für die "
     "Sitzung fertig machen kann? Wir haben nicht mehr viel Zeit und ich will das Team nicht warten lassen.",
+]
+
+SPANISH = [
+    "Ayer hablé con el equipo y decidimos mover la publicación a la próxima semana, porque "
+    "todavía quedan algunos errores por corregir y las pruebas no terminaron.",
+    "Mañana voy a llamar al cliente para explicarle el retraso y luego te cuento qué dijo, "
+    "pero creo que lo va a entender sin problema porque ya lo sabía.",
+    "¿Me puedes mandar los números antes del viernes? Quiero terminar el informe para la "
+    "reunión y no tenemos mucho tiempo, así que no quiero que el equipo tenga que esperar.",
+]
+
+FRENCH = [
+    "Hier j'ai parlé avec l'équipe et nous avons décidé de repousser la sortie à la semaine "
+    "prochaine, parce qu'il reste encore des erreurs à corriger et que les tests ne sont pas finis.",
+    "Demain je vais appeler le client pour lui expliquer le retard et je te dirai ce qu'il a "
+    "dit, mais je pense qu'il va comprendre sans problème parce qu'il le savait déjà.",
+    "Est-ce que tu peux m'envoyer les chiffres avant vendredi ? Je veux finir le rapport pour "
+    "la réunion et nous n'avons plus beaucoup de temps, donc je ne veux pas faire attendre l'équipe.",
 ]
 
 

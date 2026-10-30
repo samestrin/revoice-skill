@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `review-samples.py` now recognises Spanish and French authors as well as English and German ones, so a stray sample in another language is dropped ("not in the author's language") from a Spanish or French author's set too. Only the words that tell Spanish and French apart count, so a French sample is not taken for Spanish or the other way round.
 - Plugin icon: `.claude-plugin/icon.png` (512x512 PNG) referenced by an `icon` key in `plugin.json`, which clears `ICON_MISSING` from `claude plugin validate`. A test checks the file exists, is a PNG, and is square within 512-2048 px and under 2 MB.
 - Claude Code plugin manifests: `.claude-plugin/plugin.json` (plugin `revoice`, version 0.1.0, skill loaded from `skill/`) and `.claude-plugin/marketplace.json` (marketplace `revoice-skill`), so the repo can be added as a plugin marketplace. A test keeps the plugin version equal to the newest released CHANGELOG version and `SKILL.md` `metadata.version`.
 - README install steps start with cloning the repository, and an Upgrading section documents the upgrade and uninstall commands for Windows and macOS/Linux.
