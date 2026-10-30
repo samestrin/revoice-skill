@@ -13,3 +13,4 @@ skill/revoice/assets/*.md
 !skill/revoice/assets/example.md
 __pycache__/
 .DS_Store
+.claude/settings.local.json
