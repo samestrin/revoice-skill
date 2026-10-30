@@ -13,7 +13,7 @@ Three LOW docs rows against the Unreleased section: one entry is too long, there
 
 ## Current State
 
-`CHANGELOG.md` Unreleased has the long `Voice profiles now live` entry under `### Changed`, a second `### Changed` block further down, and a `### Fixed` entry saying Claude reads the extracted samples "to pick the best". README.md now says the review is local and Claude reads only the 15 `--top` profile samples. Line numbers have drifted; find the entries by text.
+`CHANGELOG.md` Unreleased has the long `Voice profiles now live` entry under `### Changed`, and a `### Fixed` entry saying Claude reads the extracted samples "to pick the best". README.md now says the review is local and Claude reads only the 15 `--top` profile samples. Line numbers have drifted; find the entries by text.
 
 ## Proposed Solution
 
@@ -25,11 +25,11 @@ Only the files in the File scope line. This is the one technical-debt epic that 
 
 ## Tasks (canonical)
 
-- **T1** — Shorten the `Voice profiles now live` entry to two sentences, merge the second `### Changed` block into the first, and reword the `### Fixed` "to pick the best" clause to match README.md (local review; Claude reads only the 15 `--top` samples) · `CHANGELOG.md` · depends: none · tier: junior · success: Unreleased has one `### Changed` heading, the long entry is at most two sentences, the Fixed entry no longer says "to pick the best", and `test_plugin_manifest.py` still passes; never by weakening or deleting a test
+- **T1** — Shorten the `Voice profiles now live` entry to two sentences and reword the `### Fixed` "to pick the best" clause to match README.md (local review; Claude reads only the 15 `--top` samples) · `CHANGELOG.md` · depends: none · tier: junior · success: Unreleased still has one `### Changed` heading and no entry loses its content, the long entry is at most two sentences, the Fixed entry no longer says "to pick the best", and `test_plugin_manifest.py` still passes; never by weakening or deleting a test
 
 ## Acceptance criteria
 
-- [ ] Unreleased has exactly one `### Changed` heading and no entry loses its content.
+- [ ] No Unreleased entry loses its content (there is already exactly one `### Changed` heading).
 - [ ] The `Voice profiles now live` entry is at most two sentences.
 - [ ] The `### Fixed` entry matches README.md on who reads the samples.
 - [ ] CI is green.
@@ -53,5 +53,19 @@ Only the files in the File scope line. This is the one technical-debt epic that 
 - Claims checked: 6. Discovery searches: `grep '^### ' CHANGELOG.md`, `grep -rn changelog skill/revoice/tests`, README.md `--top`/local review
 - Parallel check: File scope `CHANGELOG.md` is not in plans 4, 6, 8, 9 (they list only their own files and say they do not edit it) and there are no open PRs. Scope not widened.
 - Failure modes: none apply: docs-only edit to a changelog, no route, data, money or deploy.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-30)
+### Auto-applied corrections (1)
+- Q1 (answered by EST-3331, 95%): dropped the "merge the second `### Changed` block" clause from T1 and reworded AC1 to "no entry loses its content"; Unreleased already has one `### Changed` heading (`CHANGELOG.md:16` on main e6617fb). Current State no longer mentions a second block.
+### Items needing user confirmation (0)
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at e6617fb. Plan written: 2026-10-30. Commits reviewed since: 0
+- Tasks: 1 (limit 7). Components: 1 (limit 3): CHANGELOG.md
+- Claims checked: 6. Discovery searches: see earlier report
+- Failure modes: none apply: docs-only
 - Vision fit: no VISION.md
 <!-- refine-epic:end -->
