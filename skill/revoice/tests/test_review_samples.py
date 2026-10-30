@@ -248,8 +248,7 @@ class Rules(unittest.TestCase):
         # The thresholds apply to the author's language, whichever it is.
         self.assertEqual(rs.LANGUAGE_SHARE, 0.12)
         self.assertEqual(rs.LANGUAGE_AUTHOR_SHARE, 0.2)
-        self.assertFalse(hasattr(rs, "ENGLISH_SHARE"))
-        self.assertFalse(hasattr(rs, "ENGLISH_AUTHOR_SHARE"))
+        self.assertEqual([n for n in dir(rs) if n.startswith("ENGLISH_")], [])
 
     def test_unknown_language_runs_no_check(self):
         spanish = ("Ayer hablé con el equipo y decidimos mover la publicación a la próxima semana, "
