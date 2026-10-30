@@ -51,8 +51,8 @@ BUCKET = 50  # samples remembered per shingle
 DUPLICATE_OVERLAP = 0.7
 # Language: share of common function words of the author's language (see LANGUAGE_WORDS).
 MIN_LANGUAGE_WORDS = 20
-ENGLISH_SHARE = 0.12  # below this a sample does not look like the author's language
-ENGLISH_AUTHOR_SHARE = 0.2  # the set's median must reach this for the check to run
+LANGUAGE_SHARE = 0.12  # below this a sample does not look like the author's language
+LANGUAGE_AUTHOR_SHARE = 0.2  # the set's median must reach this for the check to run
 
 FUNCTION_WORDS = frozenset(
     "the a an and or but of to in on at for with from by as is are was were be been it this "
@@ -218,7 +218,7 @@ def language_share(text: str, language: str) -> float:
 def author_language(texts: list[str]) -> str | None:
     """The language with the highest median share over the samples long enough to judge.
 
-    None when no language reaches ENGLISH_AUTHOR_SHARE, and then no sample is
+    None when no language reaches LANGUAGE_AUTHOR_SHARE, and then no sample is
     dropped for its language.
     """
     long = [t for t in texts if len(words(t)) >= MIN_LANGUAGE_WORDS]
@@ -229,7 +229,7 @@ def author_language(texts: list[str]) -> str | None:
         shares = sorted(language_share(t, language) for t in long)
         medians[language] = shares[len(shares) // 2]
     best = max(medians, key=medians.get)  # the first, English, on a tie
-    return best if medians[best] >= ENGLISH_AUTHOR_SHARE else None
+    return best if medians[best] >= LANGUAGE_AUTHOR_SHARE else None
 
 
 def signoff_name(text: str) -> str:
@@ -286,7 +286,7 @@ def review(texts: list[str], author: str = "") -> list[dict]:
         elif i in dups:
             reason = "form letter"
         elif (language and len(words(t)) >= MIN_LANGUAGE_WORDS
-              and language_share(t, language) < ENGLISH_SHARE):
+              and language_share(t, language) < LANGUAGE_SHARE):
             reason = "not in the author's language"
         elif other_name(t, author):
             reason = "written in another name"
