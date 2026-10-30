@@ -97,7 +97,6 @@ class PluginJsonTest(unittest.TestCase):
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
         self.assertEqual(self.plugin["version"], version)
 
-
     def test_icon_is_a_square_png_in_range(self):
         icon = self.plugin["icon"]
         path = ROOT / icon  # relative to the plugin root
