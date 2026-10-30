@@ -25,7 +25,7 @@ Only the files in the File scope line. Only the language constants and function-
 
 ## Tasks (canonical)
 
-- **T1** — Rename `ENGLISH_SHARE` to `LANGUAGE_SHARE` and `ENGLISH_AUTHOR_SHARE` to `LANGUAGE_AUTHOR_SHARE` in code and tests; failing test first that reads the new names · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: none · tier: junior · success: no `ENGLISH_SHARE` or `ENGLISH_AUTHOR_SHARE` remains and behaviour is identical; never by weakening or deleting a test
+- **T1** — Give `ENGLISH_SHARE` the new name `LANGUAGE_SHARE` and `ENGLISH_AUTHOR_SHARE` the new name `LANGUAGE_AUTHOR_SHARE` in code and tests; failing test first that reads the new names · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: none · tier: junior · success: no `ENGLISH_SHARE` or `ENGLISH_AUTHOR_SHARE` remains and behaviour is identical; never by weakening or deleting a test
 - **T2** — Add function-word lists for Spanish and French to `LANGUAGE_WORDS`, so a stray off-language sample is dropped for those authors too; failing test first with Spanish and French sets and a stray English sample · `skill/revoice/build/review-samples.py`, `skill/revoice/tests/test_review_samples.py` · depends: T1 · tier: junior · success: a Spanish or French author's set drops stray samples in another language and English and German behaviour is unchanged; never by weakening or deleting a test
 
 ## Acceptance criteria
@@ -53,5 +53,17 @@ Only the files in the File scope line. Only the language constants and function-
 - Parallel check: no Paperclip `Epic <N>:` parent open in the project; no open PRs; File scope (`review-samples.py`, `test_review_samples.py`) shared with no other plan in `epics/active/` (4, 6, 7, 9).
 - Claims checked: 8. Discovery searches: `ENGLISH_` , `FUNCTION_WORDS`, `LANGUAGE_WORDS`, `other_name`
 - Failure modes: none apply: local build script, no network, login, money or deploy
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-30, dispatch follow-up)
+### Auto-applied corrections (1)
+- T1 wording: "Rename" matched the dispatch router's mechanical-work rule (`routing.py:100,146`) and the tool refused T1. Reworded without changing intent, on the owner's answer (EST-3329 card `dispatch-t1`, option `reword`).
+### Items needing user confirmation (0)
+### Advisory observations (0)
+### Verification context
+- Code repo: revoice-skill at e880f34. Tasks: 2 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 1. Failure modes: none apply: wording change only
 - Vision fit: no VISION.md
 <!-- refine-epic:end -->
