@@ -38,3 +38,20 @@ Only the files in the File scope line. This is the one technical-debt epic that 
 
 - Never run `deploy.sh`; never write to `~/.claude/skills/` or `~/.agents/skills/`.
 - Every task ends green on `python3 -m unittest discover -s skill/revoice/tests`, never by weakening or deleting a test.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-30)
+### Auto-applied corrections (0)
+### Items needing user confirmation (1)
+- **Q1 (T1, AC1): the second `### Changed` heading no longer exists.** `CHANGELOG.md` Unreleased has one `### Added` (line 8), one `### Changed` (line 16) and one `### Fixed` (line 25); `grep '^### '` shows no duplicate. Debt row `CHANGELOG.md:19` (technical-debt README line 35) is already satisfied, and AC1's first half holds today. Options: drop the merge clause from T1 and reword AC1 to "no entry loses its content" (recommended); keep the plan as it is.
+### Advisory observations (2)
+- The "Voice profiles now live" entry is `CHANGELOG.md:18` and the "to pick the best" clause is `CHANGELOG.md:27`; both still need the work in T1 (the long entry has four sentences, the Fixed entry still says Claude reads the samples "to pick the best" while README.md:165 says Claude reads only the 15 `--top` samples).
+- The `CHANGELOG.md` entry at line 22 (README updated to match) is also long, but no row covers it; left out of scope.
+### Verification context
+- Code repo: revoice-skill at e6617fb. Plan written: 2026-10-30. Commits reviewed since: 0 on CHANGELOG.md
+- Tasks: 1 (limit 7). Components: 1 (limit 3): CHANGELOG.md
+- Claims checked: 6. Discovery searches: `grep '^### ' CHANGELOG.md`, `grep -rn changelog skill/revoice/tests`, README.md `--top`/local review
+- Parallel check: File scope `CHANGELOG.md` is not in plans 4, 6, 8, 9 (they list only their own files and say they do not edit it) and there are no open PRs. Scope not widened.
+- Failure modes: none apply: docs-only edit to a changelog, no route, data, money or deploy.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
