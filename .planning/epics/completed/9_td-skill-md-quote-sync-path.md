@@ -29,8 +29,8 @@ Only the files in the File scope line. Only the Step 6 sync command. The two `al
 
 ## Acceptance criteria
 
-- [ ] The Step 6 command quotes the sync path; the two sync-specific `allowed-tools` patterns stay unquoted.
-- [ ] CI is green.
+- [x] The Step 6 command quotes the sync path; the two sync-specific `allowed-tools` patterns stay unquoted. _(verified 2026-10-30: SKILL.md:115 reads `python3 "${CLAUDE_SKILL_DIR}/sync.py"`; SKILL.md:5 patterns unquoted; test_skill_md.py `test_skill_dir_names_its_own_folder` asserts the quoted form and `test_allowed_tools_use_skill_dir` the unquoted patterns)_
+- [x] CI is green. _(verified 2026-10-30: CI success on main 0f3a807, https://github.com/samestrin/revoice-skill/actions/runs/40984534659)_
 
 ## Repo rules
 
