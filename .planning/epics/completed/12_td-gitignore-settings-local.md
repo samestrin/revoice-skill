@@ -29,8 +29,8 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Acceptance criteria
 
-- [ ] `.claude/settings.local.json` is ignored by git.
-- [ ] CI is green.
+- [x] `.claude/settings.local.json` is ignored by git. _(verified 2026-10-30: `git check-ignore -v` on main matches .gitignore:16; no tracked file is ignored (`git ls-files -ci --exclude-standard` empty))_
+- [x] CI is green. _(verified 2026-10-30: CI success on main at 0de30cf and 9be9928)_
 
 ## Repo rules
 
