@@ -29,10 +29,10 @@ Only the files in the File scope line. This is the one technical-debt epic that 
 
 ## Acceptance criteria
 
-- [ ] No Unreleased entry loses its content (there is already exactly one `### Changed` heading).
-- [ ] The `Voice profiles now live` entry is at most two sentences.
-- [ ] The `### Fixed` entry matches README.md on who reads the samples.
-- [ ] CI is green.
+- [x] No Unreleased entry loses its content (there is already exactly one `### Changed` heading). _(verified 2026-10-30: CHANGELOG.md diff 3c5d7f2 only rewords two bullets; every clause kept; one `### Changed` heading)_
+- [x] The `Voice profiles now live` entry is at most two sentences. _(verified 2026-10-30: CHANGELOG.md:18 is two sentences)_
+- [x] The `### Fixed` entry matches README.md on who reads the samples. _(verified 2026-10-30: CHANGELOG.md:27 says Claude reads only 15 / `--top` samples, matching README.md:165)_
+- [x] CI is green. _(verified 2026-10-30: CI run 40983984162 on main, success)_
 
 ## Repo rules
 
