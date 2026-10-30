@@ -112,6 +112,6 @@ Follow the voice profile as the authority on how the text should sound. Rules:
 
 ## Step 6: Sync (`--sync`)
 
-- Run `python3 ${CLAUDE_SKILL_DIR}/sync.py` (add the slug for `--sync=<slug>`). On Windows use `python` instead of `python3` (there `python3` is a Microsoft Store shortcut). It needs PyYAML (`pip install pyyaml`). It writes to `~/.config/revoice/voices/` and fetches the raw notes over HTTP so they never pass through context. Do not use the SilverBullet MCP for sync, and do not write voice files by hand.
+- Run `python3 "${CLAUDE_SKILL_DIR}/sync.py"` (add the slug for `--sync=<slug>`). On Windows use `python` instead of `python3` (there `python3` is a Microsoft Store shortcut). It needs PyYAML (`pip install pyyaml`). It writes to `~/.config/revoice/voices/` and fetches the raw notes over HTTP so they never pass through context. Do not use the SilverBullet MCP for sync, and do not write voice files by hand.
 - It syncs each voice's base note and any audience overlay notes named `<base note> (<audience>).md`. SilverBullet is the master copy; never write the other way.
 - Report its output: which files were updated, skipped, or missing. If it exits non-zero, show the error.

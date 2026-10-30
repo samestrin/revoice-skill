@@ -26,6 +26,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - README now says the extracted samples go to the text analysis API during `--build` (along with the reference set of other senders' emails), and that Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — which go to Claude's model provider.
 - `/revoice --voice=<slug>` now rewrites on a fresh install with no `~/.config/revoice/config.yaml` (no default audience, relative paths from the current folder), so `/revoice --voice=example <text>` works straight after install. Without `--voice`, and for `sb:` paths and `--sync`, it still stops and asks for the config. README install step shows the example command.
+- `SKILL.md` Step 6 quotes the sync script path (`python3 "${CLAUDE_SKILL_DIR}/sync.py"`), so `--sync` works when the skill is installed in a folder whose path has spaces.
 
 ## [0.1.0] - 2026-10-26
 
