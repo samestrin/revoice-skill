@@ -9,7 +9,7 @@
 
 ## Why
 
-Three LOW docs rows against the Unreleased section: one entry is too long, there are two `### Changed` headings, and a `### Fixed` entry contradicts README.md.
+Three LOW docs rows against the Unreleased section: one entry is too long and a `### Fixed` entry contradicts README.md.
 
 ## Current State
 
