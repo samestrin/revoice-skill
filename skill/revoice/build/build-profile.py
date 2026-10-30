@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build an author's voice profile JSON from their reviewed writing samples.
 
-Uses the text analysis API (https://text-analysis-api.estr.in):
+Uses the text analysis API (https://api.yourvoice.dev):
   - voice_profile   : /analyze/voice-profile on the top-N samples joined into
                       one text; usable as-is in /analyze/compare-profiles
   - comparison      : a z-score baseline (mean/std per feature over the author
@@ -87,7 +87,7 @@ def main() -> None:
                     help="author's address, recorded in the profile (repeatable)")
     ap.add_argument("--cutoff", default=None,
                     help="the date the mbox was filtered to, recorded in the profile (YYYY-MM-DD)")
-    ap.add_argument("--api", default="https://text-analysis-api.estr.in")
+    ap.add_argument("--api", default="https://api.yourvoice.dev")
     ap.add_argument("--api-key", default=os.environ.get("TEXT_ANALYSIS_API_KEY"))
     ap.add_argument("--api-key-file", type=Path,
                     default=Path.home() / ".config" / "revoice" / "api-key")

@@ -69,7 +69,7 @@ From `WORK`:
 <python> SKILL/build/build-profile.py --samples samples --reference reference --author "<Name>" --from <addr1> --from <addr2> --cutoff <cutoff> -o voice-profile.json
 ```
 
-Leave out `--reference reference` if the reference set is off. It sends the kept samples to the API at https://text-analysis-api.estr.in/ and can take a minute. If it reports a 401, the key is wrong; send the user back to phase 3.
+Leave out `--reference reference` if the reference set is off. It sends the kept samples to the API at https://api.yourvoice.dev/ and can take a minute. If it reports a 401, the key is wrong; send the user back to phase 3.
 
 ## Phase 6: Write the voice file
 

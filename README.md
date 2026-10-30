@@ -30,14 +30,14 @@ Getting started is three steps: install the skill, save your API key, and run `/
 2. On the dashboard, create an API key.
 3. Save the key to `~/.config/revoice/api-key` (step 2 below shows how).
 
-Only `--build` uses the key, and only to call `https://text-analysis-api.estr.in/`. Using `/revoice` to rewrite text never touches the API.
+Only `--build` uses the key, and only to call `https://api.yourvoice.dev/`. Using `/revoice` to rewrite text never touches the API.
 
-Building the profile charges credits per text sent; the API's docs at https://text-analysis-api.estr.in/ say what each request costs.
+Building the profile charges credits per text sent; the API's docs at https://api.yourvoice.dev/ say what each request costs.
 
 ## Text analysis API
 
-- API: https://text-analysis-api.estr.in/
-- Docs: https://text-analysis-api.estr.in/swagger-ui/
+- API: https://api.yourvoice.dev/
+- Docs: https://api.yourvoice.dev/swagger-ui/
 
 Every request needs your key in an `X-API-Key` header. The build already points at this API and reads the key from a file (step 2 below), so you never call the API by hand and never paste the key into Claude.
 

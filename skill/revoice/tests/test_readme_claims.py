@@ -24,7 +24,7 @@ class TestReadmeClaims(unittest.TestCase):
         self.assertNotIn("enough to build a voice profile", self.text)
 
     def test_points_to_api_docs(self):
-        self.assertIn("https://text-analysis-api.estr.in/", self.text)
+        self.assertIn("https://api.yourvoice.dev/", self.text)
 
 
 class TestReadmeLocalReview(unittest.TestCase):
