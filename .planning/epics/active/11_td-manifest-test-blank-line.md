@@ -36,3 +36,18 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 - Never run `deploy.sh`; never write to `~/.claude/skills/` or `~/.agents/skills/`.
 - Every task ends green on `python3 -m unittest discover -s skill/revoice/tests`, never by weakening or deleting a test.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-30)
+### Auto-applied corrections (0)
+### Items needing user confirmation (0)
+### Advisory observations (1)
+- `.planning/epics/active/4_td-manifest-tests-and-icon.md` still sits in `active/` although `completed/4_td-manifest-tests-and-icon.md` exists on `main` (shipped in #39, #40). It lists the same test file, but it is not in flight, so it does not block this epic. Not touched here.
+### Verification context
+- Code repo: revoice-skill at f49e9a5. Plan written: 2026-10-30. Commits reviewed since: 0
+- Tasks: 1 (limit 7). Components: 1 (limit 3): skill/revoice/tests
+- Claims checked: 3. `test_plugin_manifest.py:99-100` are two blank lines before `test_icon_is_a_square_png_in_range` (line 101); the file has 11 `def test_`; `unittest discover` runs 130 tests, OK. Discovery searches: rg for the file across active plans and the technical-debt row (row 1, `[/]`, epic 11).
+- Parallel exception (step 0): scope `skill/revoice/tests/test_plugin_manifest.py` shared with no other active plan except the shipped epic 4 file above; no open PRs (`gh pr list`); no open `Epic` issues in the project. Scope not widened.
+- Failure modes: none apply: a whitespace-only edit to a test file.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
