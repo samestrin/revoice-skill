@@ -32,7 +32,6 @@ Small technical debt items found during development.
 |-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
 | 2 | [ ] | LOW | .gitignore:1 | `.claude/settings.local.json` is not ignored, so it shows up as untracked. | Add `.claude/settings.local.json` to `.gitignore`. | config | 5 | paperclip-reviewer | 0 |
 | 3 | [/] | LOW | CHANGELOG.md:17 | The Unreleased `Voice profiles now live` entry is longer than the one-or-two-sentence limit. | Shorten it to two sentences. → epic 7 | docs | 10 | paperclip-reviewer | 0 |
-| 3 | [/] | LOW | skill/revoice/SKILL.md:115 | `python3 ${CLAUDE_SKILL_DIR}/sync.py` is unquoted, and the `allowed-tools` pattern matches the unquoted form, so a skill path with spaces breaks. | Quote the path in the command and in `allowed-tools`. → epic 9 | correctness | 15 | paperclip-reviewer | 0 |
 
 ### [2026-10-28] From: epic 2.1
 
@@ -48,4 +47,4 @@ Small technical debt items found during development.
 | CRITICAL | 0 | 0 | 0 |
 | HIGH | 0 | 0 | 0 |
 | MEDIUM | 0 | 0 | 0 |
-| LOW | 8 | 0 | 0 |
+| LOW | 3 | 5 | 0 |
