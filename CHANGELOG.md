@@ -15,7 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Voice profiles now live in `~/.config/revoice/voices/`, outside the skill folder, so updating the skill (or the plugin) never deletes them. `--build` saves the new voice there, `--sync` writes there, and `/revoice` reads a voice from there first, then from the skill's own `assets/` (which now ships only `example.md`, so `--voice=example` still works). Move any voice files you kept in the skill's `assets/` folder to `~/.config/revoice/voices/`. `sync.py` refuses a voice slug that is not a plain file name.
+- Voice profiles now live in `~/.config/revoice/voices/`, outside the skill folder, so updating the skill (or the plugin) never deletes them: `--build` saves the new voice there, `--sync` writes there, and `/revoice` reads a voice from there first, then from the skill's own `assets/` (which now ships only `example.md`, so `--voice=example` still works). Move any voice files you kept in the skill's `assets/` folder to `~/.config/revoice/voices/`; `sync.py` refuses a voice slug that is not a plain file name.
 - `SKILL.md` names its own folder with `${CLAUDE_SKILL_DIR}` instead of `~/.claude/skills/revoice/` (in the body and in `allowed-tools`), so the skill finds `build.md`, `sync.py` and the bundled voices whether it was installed as a plugin or by copying the folder. A test fails on any hard-coded install path, and on a `SKILL.md` without `name: revoice` (the field that keeps the bare `/revoice` command under a plugin).
 - README: the plugin commands (`/plugin marketplace add samestrin/revoice-skill`, then `/plugin install revoice@revoice-skill`) are now the main install, with update and uninstall through `/plugin update` and `/plugin uninstall`; the copy-folder install stays as the second option. The README says voices live in `~/.config/revoice/voices/`, tells anyone switching from the copy-folder install to move their voice files there and delete `~/.claude/skills/revoice/` (a leftover copy takes the bare `/revoice` command), and keeps `/revoice` as the command. `test_readme_claims.py` covers the new install section.
 - `--build` now reviews the extracted samples locally: `build.md` phase 4 runs `review-samples.py --author "<Name>"` on your machine and reports the KEEP/DROP counts and top reasons, with no network access. Phase 6 tells Claude to set aside any kept sample that is clearly not the author's own voice or language, and to say so in the report.
@@ -24,7 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- README now says the extracted samples go to Claude's model provider during `--build` (Claude reads them to pick the best), and that the text analysis API gets the reference set of other senders' emails as well as the chosen samples.
+- README now says the extracted samples go to the text analysis API during `--build` (along with the reference set of other senders' emails), and that Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — which go to Claude's model provider.
 - `/revoice --voice=<slug>` now rewrites on a fresh install with no `~/.config/revoice/config.yaml` (no default audience, relative paths from the current folder), so `/revoice --voice=example <text>` works straight after install. Without `--voice`, and for `sb:` paths and `--sync`, it still stops and asks for the config. README install step shows the example command.
 
 ## [0.1.0] - 2026-10-26
