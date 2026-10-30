@@ -8,6 +8,12 @@ Small technical debt items found during development.
 |-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
 | 1 | [/] | LOW | skill/revoice/build/review-samples.py:54 | `ENGLISH_SHARE` and `ENGLISH_AUTHOR_SHARE` keep English names although they now apply to the author's language (English or German). | Rename them to `LANGUAGE_SHARE` and `LANGUAGE_AUTHOR_SHARE`, updating the tests. → epic 8 | style | 10 | paperclip-cto | 0 |
 
+### [2026-10-30] From: EST-3330-refine-revoice-skill-epic-9-skill-md-quoted-sync-path
+
+| Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
+|-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
+| 1 | [ ] | LOW | skill/revoice/SKILL.md:5 | The `allowed-tools` patterns `Bash(python3 ${CLAUDE_SKILL_DIR}/sync.py:*)` and `Bash(python ${CLAUDE_SKILL_DIR}/sync.py:*)` are redundant with `Bash(python:*)` and `Bash(python3:*)` on the same line. | Delete the two sync-specific patterns and the matching assertions in test_skill_md.py (~178-179). | docs | 10 | paperclip-cto | 0 |
+
 ### [2026-10-29] From: refine/epic-5
 
 | Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
