@@ -25,7 +25,7 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Tasks (canonical)
 
-- **T1** — Remove the second `Bash(test:*)` from `allowed-tools`; first add a test in `test_skill_md.py` that the entries of `allowed-tools` have no duplicates, so it fails before the edit · `skill/revoice/SKILL.md`, `skill/revoice/tests/test_skill_md.py` · depends: none · tier: junior · success: line 5 lists `Bash(test:*)` once, every other entry is unchanged, and the new test passes; never by weakening or deleting a test
+- **T1** — Remove the second `Bash(test:*)` from `allowed-tools`; first add a test in `test_skill_md.py` (using its existing `allowed_tools()` helper) that the entries of `allowed-tools` have no duplicates, so it fails before the edit · `skill/revoice/SKILL.md`, `skill/revoice/tests/test_skill_md.py` · depends: none · tier: junior · success: line 5 lists `Bash(test:*)` once, every other entry is unchanged, and the new test passes; never by weakening or deleting a test
 
 ## Acceptance criteria
 
@@ -36,3 +36,19 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 - Never run `deploy.sh`; never write to `~/.claude/skills/` or `~/.agents/skills/`.
 - Every task ends green on `python3 -m unittest discover -s skill/revoice/tests`, never by weakening or deleting a test.
+
+<!-- refine-epic:begin -->
+## Refinements (2026-10-31)
+### Auto-applied corrections (1)
+- T1 now names the existing `allowed_tools()` helper (`skill/revoice/tests/test_skill_md.py:148`) so the new test reuses it. Intent unchanged.
+### Items needing user confirmation (0)
+### Advisory observations (1)
+- Current State holds: `skill/revoice/SKILL.md:5` lists `Bash(test:*)` twice on `main` (129e311). Last edit to the file was d947abf (#60), before the plan was written; nothing since contradicts it.
+### Verification context
+- Code repo: revoice-skill at 129e311. Plan written: 2026-10-31. Commits reviewed since: 0
+- Tasks: 1 (limit 7). Components: 1 (limit 3): skill/revoice
+- Claims checked: 3. Discovery searches: `allowed-tools` in SKILL.md and tests; `allowed_tools` helper; File scope of active plans 4 and 6 and open PR #67
+- Parallel check: scope files (SKILL.md, test_skill_md.py) are shared with no other active plan (4: test_plugin_manifest.py, plugin.json, icon.png; 6: sync.py, test_sync.py) and not with open PR #67 (.github/*, CHANGELOG.md). Parallel run holds.
+- Failure modes: none apply: a one-line edit to a frontmatter list and a unit test; no route, data, money or deploy.
+- Vision fit: no VISION.md
+<!-- refine-epic:end -->
