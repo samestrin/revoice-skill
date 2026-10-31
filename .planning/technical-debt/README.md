@@ -6,7 +6,7 @@ Small technical debt items found during development.
 
 | Group | | Severity | File | Problem | Fix | Category | Est Minutes | Source | Attempts |
 |-------|---|----------|------|---------|-----|----------|-------------|--------|----------|
-| 1 | [ ] | LOW | skill/revoice/SKILL.md:5 | `Bash(test:*)` is listed twice in `allowed-tools`. | Remove the second `Bash(test:*)`. | docs | 5 | paperclip-cto | 0 |
+| 1 | [/] | LOW | skill/revoice/SKILL.md:5 | `Bash(test:*)` is listed twice in `allowed-tools`. | Remove the second `Bash(test:*)`. → epic 13 | docs | 5 | paperclip-cto | 0 |
 
 ## Stats
 
