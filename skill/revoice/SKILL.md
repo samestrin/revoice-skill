@@ -2,7 +2,7 @@
 name: revoice
 description: Rewrite a body of text so it reads like a specific person wrote it, using a voice profile stored as a local file in ~/.config/revoice/voices/ (default voice from config). Input is inline text or an @file. Optional --voice= picks a profile, --audience=casual|business|formal steers it (using an <voice>-<audience>.md overlay if one exists), --template= supplies a structure to follow (local path, or sb:<note> for SilverBullet), --output-path= saves the result (local path, or sb:<note> for SilverBullet); with no output path the rewrite is only shown. SilverBullet support is optional; without it everything works with local files. --sync pulls voice profiles from SilverBullet into ~/.config/revoice/voices/. --build walks the user through building their own voice profile from an email export (mbox). Use when the user runs /revoice or asks to rewrite, redraft, or convert text "in my voice" / "like me".
 argument-hint: '[--voice=<slug>] [--audience=casual|business|formal] [--template=[sb:]<path>] [--output-path=[sb:]<path>] (@file | <text>)  |  --sync[=<slug>]  |  --build'
-allowed-tools: Read, Write, Bash(ls:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(python:*), Bash(python3:*), Bash(test:*), mcp__silverbullet__read-note, mcp__silverbullet__create-note
+allowed-tools: Read, Write, Bash(ls:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(python:*), Bash(python3:*), mcp__silverbullet__read-note, mcp__silverbullet__create-note
 metadata:
   version: "0.1.0"
 ---
