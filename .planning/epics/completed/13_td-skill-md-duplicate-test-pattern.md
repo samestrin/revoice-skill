@@ -29,8 +29,8 @@ Only the files in the File scope line. `CHANGELOG.md` and the technical-debt lis
 
 ## Acceptance criteria
 
-- [ ] `allowed-tools` has no duplicate entries and a test pins it.
-- [ ] CI is green.
+- [x] `allowed-tools` has no duplicate entries and a test pins it. _(verified 2026-10-31: skill/revoice/SKILL.md:5 lists `Bash(test:*)` once; `test_allowed_tools_have_no_duplicates` in skill/revoice/tests/test_skill_md.py asserts it, and the suite passes, 131 tests)_
+- [x] CI is green. _(verified 2026-10-31: CI run 41209801036 on main at 9f02a9a succeeded)_
 
 ## Repo rules
 
