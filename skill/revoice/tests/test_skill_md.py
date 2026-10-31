@@ -181,6 +181,11 @@ class InstallPathTest(unittest.TestCase):
         self.assertIn("Bash(python:*)", tools)
         self.assertIn("Bash(python3:*)", tools)
 
+    def test_allowed_tools_have_no_duplicates(self):
+        tools = allowed_tools()
+        duplicates = sorted({tool for tool in tools if tools.count(tool) > 1})
+        self.assertEqual(duplicates, [])
+
     def test_no_fallback_path(self):
         # ${CLAUDE_SKILL_DIR} is set in both installs; a second path would only drift.
         self.assertNotIn("CLAUDE_PLUGIN_ROOT", TEXT)
