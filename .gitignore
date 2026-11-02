@@ -14,3 +14,6 @@ skill/revoice/assets/*.md
 __pycache__/
 .DS_Store
 .claude/settings.local.json
+
+# private plans (samestrin/revoice-skill-planning)
+.planning/
