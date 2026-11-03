@@ -10,6 +10,7 @@ from unittest import mock
 from _load import BUILD, load, run_main
 
 bp = load(BUILD / "build-profile.py", "build_profile")
+es = load(BUILD / "extract-samples.py", "extract_samples")
 
 FEATURES = {"avg_sentence_length": 10.0, "contractions": 0.5}
 
@@ -275,6 +276,7 @@ class BuildProfileTest(unittest.TestCase):
 
     def test_cost_formula(self):
         self.assertEqual(bp.build_cost(3, 0), 7)
+        self.assertEqual(bp.build_cost(148, 0), 249)
         self.assertEqual(bp.build_cost(149, 0), 250)
         self.assertEqual(bp.build_cost(200, 200), 501)
 
@@ -376,6 +378,52 @@ class BuildProfileTest(unittest.TestCase):
             self.build("--check", api=api, author=())
         self.assertIn("rejected the key", str(cm.exception))
         self.assertEqual(len(api.requests), 1)
+
+    # --estimate
+
+    def test_estimate_makes_no_request_and_needs_no_key_or_author(self):
+        self.reviewed_samples()
+        api = FakeAPI()
+        self.build("--estimate", api=api, key=(), author=())
+        self.assertEqual(api.requests, [])
+        self.assertIn("estimated cost: 7 credits (3 samples, 0 reference texts)", self.stdout)
+        self.assertFalse(self.out.exists())
+
+    def test_estimate_compares_with_a_given_balance(self):
+        self.reviewed_samples()
+        self.build("--estimate", "--balance", "5", key=(), author=())
+        self.assertIn("balance: 5 credits", self.stdout)
+        self.assertIn("short by 2 credits", self.stdout)
+        self.assertIn("yourvoice.dev", self.stdout)
+
+    def test_estimate_with_enough_balance_is_not_short(self):
+        self.reviewed_samples()
+        self.build("--estimate", "--balance", "7", key=(), author=())
+        self.assertIn("estimated cost: 7 credits", self.stdout)
+        self.assertNotIn("short by", self.stdout)
+
+    def test_estimate_before_extraction_has_no_samples_yet(self):
+        self.build("--estimate", key=(), author=())
+        self.assertIn("no samples", self.stdout)
+
+    # The whole default build.md flow on a new key with the 250 free credits:
+    # phase 0 --check (1 credit), phase 3 --estimate (free), phase 5 build of
+    # extract-samples.py's default cap of samples with no reference set.
+
+    def test_default_build_with_its_key_check_fits_the_free_credits(self):
+        n = es.MAX_SAMPLES
+        write_samples(self.samples, [
+            {"file": f"s{i}.md", "words": 200, "verdict": "KEEP", "score": i, "text": f"Sample {i}."}
+            for i in range(n)])
+        api = FakeAPI(credits=250)
+        self.build("--check", api=api, author=())
+        self.assertIn("balance: 249 credits", self.stdout)
+        self.build("--estimate", "--balance", "249", api=api, key=(), author=())
+        self.assertNotIn("short by", self.stdout)
+        self.build(api=api)
+        self.assertTrue(self.out.exists())
+        self.assertEqual(json.loads(self.out.read_text())["meta"]["samples"]["fingerprint_and_baseline"], n)
+        self.assertGreaterEqual(api.credits, 0)
 
     def test_build_without_author_or_check_is_refused_before_any_request(self):
         self.reviewed_samples()

@@ -9,7 +9,7 @@ For each message sent FROM one of the given addresses:
     ...", and trailing lines that recur at the end of many messages)
   - keep it if what is left has at least --min-words words
   - skip exact duplicates
-  - keep at most --max-samples (default 149), the longest first (0 = no cap)
+  - keep at most --max-samples (default 148), the longest first (0 = no cap)
 
 With --others the sender filter is inverted: it keeps messages NOT from the
 given addresses. Use that to build a reference folder of other people's
@@ -43,6 +43,11 @@ REPLY_MARKERS = re.compile(
     r")",
     re.M | re.I,
 )
+# A default build (reference set off) of N samples costs 1 + N + min(N, 100)
+# credits (build-profile.py), plus 1 for build.md's --check of the key: 148
+# makes 250, the free credits a new API key gets.
+MAX_SAMPLES = 148
+
 SIG_DELIM = re.compile(r"^--[ \t]*$", re.M)
 SENT_FROM = re.compile(r"^\s*Sent from my \w[^\n]*$", re.M | re.I)
 FWD_SUBJECT = re.compile(r"^\s*(fwd?|fw)\s*:", re.I)
@@ -131,7 +136,7 @@ def main() -> None:
     ap.add_argument("--others", action="store_true",
                     help="keep messages NOT from --from instead (builds a reference folder)")
     ap.add_argument("--min-words", type=int, default=150)
-    ap.add_argument("--max-samples", type=int, default=149,
+    ap.add_argument("--max-samples", type=int, default=MAX_SAMPLES,
                     help="keep at most this many samples, the longest first (0 = no cap)")
     ap.add_argument("--sig-min-count", type=int, default=15,
                     help="a trailing line seen at the end of this many messages is a signature")

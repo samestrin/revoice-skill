@@ -27,6 +27,10 @@ build, the build stops there and has spent 1 credit.
 the balance and the estimated cost of a build from --samples and --reference.
 It writes no profile and does not need --author.
 
+--estimate prints the estimated cost the same way but calls nothing and needs
+no key, so it is free. Give it the balance --check printed (--balance N) and
+it says whether that covers the build.
+
 The API key is read from --api-key, else the TEXT_ANALYSIS_API_KEY environment
 variable, else the key file (default ~/.config/revoice/api-key). The key file
 keeps the key out of chat transcripts and shell history.
@@ -100,6 +104,11 @@ def check(api: str, key: str, samples: Path, reference: Path | None) -> None:
     """Spend 1 credit to show the key works, the balance and the build's cost."""
     _, balance = post_with_balance(api, "/analyze/voice-profile", {"texts": [CHECK_TEXT]}, key)
     print("key: OK")
+    estimate(samples, reference, balance)
+
+
+def estimate(samples: Path, reference: Path | None, balance: int | None) -> None:
+    """Print the balance and the build's cost, and how short the balance is."""
     print(f"balance: {balance} credits" if balance is not None else "balance: unknown")
     if not (samples / "index.csv").is_file():
         print(f"estimated cost: no samples in {samples} yet")
@@ -175,9 +184,17 @@ def main() -> None:
     ap.add_argument("--check", action="store_true",
                     help="spend 1 credit to check the key; print the balance and the "
                          "estimated cost of a build, write nothing")
+    ap.add_argument("--estimate", action="store_true",
+                    help="print the estimated cost of a build without calling the API "
+                         "(free, no key needed), write nothing")
+    ap.add_argument("--balance", type=int, default=None,
+                    help="with --estimate: the balance --check printed, to say if it is short")
     args = ap.parse_args()
+    if args.estimate:
+        estimate(args.samples, args.reference, args.balance)
+        return
     if not args.check and not args.author:
-        ap.error("--author is required (except with --check)")
+        ap.error("--author is required (except with --check or --estimate)")
     if not args.api_key and args.api_key_file.is_file():
         # utf-8-sig: Notepad and PowerShell may save the file with a BOM
         args.api_key = args.api_key_file.read_text(encoding="utf-8-sig").strip()
