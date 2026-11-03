@@ -14,12 +14,30 @@ bp = load(BUILD / "build-profile.py", "build_profile")
 FEATURES = {"avg_sentence_length": 10.0, "contractions": 0.5}
 
 
+METERED = ("/analyze/voice-profile", "/analyze/fingerprint")
+
+
+class FakeReply(io.BytesIO):
+    """A urlopen reply: a body plus response headers."""
+
+    def __init__(self, data: bytes, headers: dict):
+        super().__init__(data)
+        self.headers = headers
+
+
 class FakeAPI:
-    """Stands in for urllib.request.urlopen; records every request, no network."""
+    """Stands in for urllib.request.urlopen; records every request, no network.
+
+    Like the API, each metered call costs 1 credit per text in "texts" and the
+    reply carries the balance left in X-Credits-Remaining. credits=None sends
+    no header (the balance is unknown); header= sends that value as is.
+    """
 
     def __init__(self, fail_path=None, fail_code=402, fail_body=None, fail_headers=None,
-                 fail_exc=None):
+                 fail_exc=None, credits=1000, header=None):
         self.requests = []
+        self.credits = credits
+        self.header = header
         self.fail_path = fail_path
         self.fail_code = fail_code
         self.fail_body = fail_body if fail_body is not None else b'{"detail": "out of credits"}'
@@ -47,10 +65,20 @@ class FakeAPI:
             reply = {"version": "9.9.9"}
         else:
             raise AssertionError(f"unexpected path {path}")
-        return io.BytesIO(json.dumps(reply).encode())
+        headers = {}
+        if path in METERED:
+            if self.credits is not None:
+                self.credits -= len(body["texts"])
+                headers["X-Credits-Remaining"] = str(self.credits)
+            if self.header is not None:
+                headers["X-Credits-Remaining"] = self.header
+        return FakeReply(json.dumps(reply).encode(), headers)
 
     def calls(self, path):
         return [r for r in self.requests if r["path"] == path]
+
+    def metered(self):
+        return [r for r in self.requests if r["path"] in METERED]
 
 
 def write_samples(folder: Path, rows: list[dict]) -> None:
@@ -74,14 +102,22 @@ class BuildProfileTest(unittest.TestCase):
         self.addCleanup(env.stop)
         os.environ.pop("TEXT_ANALYSIS_API_KEY", None)
 
-    def build(self, *argv, api=None, key=("--api-key", "test-key")):
+    def build(self, *argv, api=None, key=("--api-key", "test-key"),
+              author=("--author", "Alex Rivera")):
         api = api or FakeAPI()
-        args = ["--samples", str(self.samples), "--author", "Alex Rivera",
+        args = ["--samples", str(self.samples), *author,
                 "--from", "alex@example.com", "--api", "https://api.test/",
                 "--api-key-file", str(self.dir / "no-key-file"), "-o", str(self.out), *key, *argv]
         with mock.patch.object(bp.urllib.request, "urlopen", api):
-            run_main(bp, *args)
+            _, self.stdout = run_main(bp, *args)
         return api
+
+    def reference_set(self, n):
+        ref = self.dir / "reference"
+        ref.mkdir()
+        for i in range(n):
+            (ref / f"{i}.md").write_text(f"# r{i}\n\nReference {i}.\n", encoding="utf-8")
+        return ref
 
     def reviewed_samples(self):
         write_samples(self.samples, [
@@ -231,6 +267,122 @@ class BuildProfileTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             self.build(api=api)
         self.assertIn("no usable samples", str(cm.exception))
+        self.assertEqual(api.requests, [])
+
+
+    # Cost guard. reviewed_samples() keeps 3 samples, so a build costs
+    # 1 (joined profile) + 3 (per sample) + 0 (reference) + 3 (fingerprint) = 7.
+
+    def test_cost_formula(self):
+        self.assertEqual(bp.build_cost(3, 0), 7)
+        self.assertEqual(bp.build_cost(149, 0), 250)
+        self.assertEqual(bp.build_cost(200, 200), 501)
+
+    def test_balance_below_cost_stops_after_one_metered_request(self):
+        self.reviewed_samples()
+        api = FakeAPI(credits=6)  # 5 left after the first call, 6 still needed
+        with self.assertRaises(SystemExit) as cm:
+            self.build(api=api)
+        self.assertEqual(len(api.metered()), 1)
+        self.assertEqual(len(api.requests), 1)
+        self.assertFalse(self.out.exists())
+        msg = str(cm.exception)
+        self.assertIn("costs 7 credits", msg)
+        self.assertIn("5 credits left", msg)
+        self.assertIn("yourvoice.dev", msg)
+        self.assertIn("fewer samples", msg)
+        self.assertIn("without --reference", msg)
+
+    def test_reference_texts_count_toward_the_cost(self):
+        self.reviewed_samples()
+        ref = self.reference_set(4)
+        api = FakeAPI(credits=10)  # cost 1 + 3 + 4 + 3 = 11
+        with self.assertRaises(SystemExit) as cm:
+            self.build("--reference", str(ref), api=api)
+        self.assertEqual(len(api.metered()), 1)
+        self.assertIn("costs 11 credits", str(cm.exception))
+        self.assertFalse(self.out.exists())
+
+    def test_balance_exactly_the_cost_builds(self):
+        self.reviewed_samples()
+        api = FakeAPI(credits=7)
+        self.build(api=api)
+        self.assertTrue(self.out.exists())
+        self.assertEqual(api.credits, 0)
+
+    def test_build_prints_its_cost_before_spending(self):
+        self.reviewed_samples()
+        self.build()
+        self.assertIn("costs 7 credits", self.stdout)
+
+    def test_missing_balance_header_does_not_stop_the_build(self):
+        self.reviewed_samples()
+        api = FakeAPI(credits=None)
+        self.build(api=api)
+        self.assertTrue(self.out.exists())
+
+    def test_unreadable_balance_header_does_not_stop_the_build(self):
+        self.reviewed_samples()
+        api = FakeAPI(credits=None, header="lots")
+        self.build(api=api)
+        self.assertTrue(self.out.exists())
+
+    # --check
+
+    def test_check_makes_one_metered_request_without_author_or_profile(self):
+        self.reviewed_samples()
+        api = FakeAPI(credits=250)
+        self.build("--check", api=api, author=())
+        self.assertEqual(len(api.requests), 1)
+        self.assertEqual(len(api.metered()), 1)
+        self.assertEqual(len(api.requests[0]["body"]["texts"]), 1)
+        self.assertEqual(api.requests[0]["body"], {"texts": [bp.CHECK_TEXT]})
+        self.assertFalse(self.out.exists())
+        self.assertIn("key: OK", self.stdout)
+        self.assertIn("balance: 249 credits", self.stdout)
+        self.assertIn("estimated cost: 7 credits", self.stdout)
+
+    def test_check_counts_reference_texts(self):
+        self.reviewed_samples()
+        ref = self.reference_set(4)
+        self.build("--check", "--reference", str(ref), author=())
+        self.assertIn("estimated cost: 11 credits", self.stdout)
+        self.assertIn("3 samples", self.stdout)
+        self.assertIn("4 reference texts", self.stdout)
+
+    def test_check_says_when_balance_is_short(self):
+        self.reviewed_samples()
+        self.build("--check", api=FakeAPI(credits=5), author=())
+        self.assertIn("short by 3 credits", self.stdout)
+        self.assertIn("yourvoice.dev", self.stdout)
+        self.assertFalse(self.out.exists())
+
+    def test_check_before_extraction_has_no_samples_yet(self):
+        api = FakeAPI()
+        self.build("--check", api=api, author=())
+        self.assertEqual(len(api.requests), 1)
+        self.assertIn("key: OK", self.stdout)
+        self.assertIn("no samples", self.stdout)
+
+    def test_check_with_unknown_balance(self):
+        self.reviewed_samples()
+        self.build("--check", api=FakeAPI(credits=None), author=())
+        self.assertIn("balance: unknown", self.stdout)
+        self.assertIn("estimated cost: 7 credits", self.stdout)
+
+    def test_check_with_rejected_key_is_one_line(self):
+        api = FakeAPI(fail_path="/analyze/voice-profile", fail_code=401)
+        with self.assertRaises(SystemExit) as cm:
+            self.build("--check", api=api, author=())
+        self.assertIn("rejected the key", str(cm.exception))
+        self.assertEqual(len(api.requests), 1)
+
+    def test_build_without_author_or_check_is_refused_before_any_request(self):
+        self.reviewed_samples()
+        api = FakeAPI()
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr", io.StringIO()) as err:
+            self.build(api=api, author=())
+        self.assertIn("--author", err.getvalue())
         self.assertEqual(api.requests, [])
 
 

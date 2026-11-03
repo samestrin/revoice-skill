@@ -18,6 +18,15 @@ Samples come from extract-samples.py. If index.csv has a "verdict" column
 (from the review step), only KEEP rows are used, best "score" first.
 Otherwise every sample is used, longest first.
 
+Each text sent costs 1 credit, so a build costs
+  1 + kept samples + reference texts + min(kept samples, 100)
+credits. The first call reports the balance; if it cannot cover the rest of the
+build, the build stops there and has spent 1 credit.
+
+--check spends 1 credit on a short fixed text and prints whether the key works,
+the balance and the estimated cost of a build from --samples and --reference.
+It writes no profile and does not need --author.
+
 The API key is read from --api-key, else the TEXT_ANALYSIS_API_KEY environment
 variable, else the key file (default ~/.config/revoice/api-key). The key file
 keeps the key out of chat transcripts and shell history.
@@ -39,12 +48,29 @@ from pathlib import Path
 # "reference_texts" separately).
 MAX_DOCS = 100
 
+# The one text --check sends (1 credit).
+CHECK_TEXT = "This is a short text to check the API key."
+
+WAYS_OUT = ("Buy credits at https://yourvoice.dev, or rebuild with fewer samples "
+            "or without --reference.")
+
+
+def build_cost(samples: int, reference: int) -> int:
+    """Credits a build spends: 1 per text sent."""
+    return 1 + samples + reference + min(samples, MAX_DOCS)
+
 
 def post(api: str, path: str, body: dict, key: str) -> dict:
+    return post_with_balance(api, path, body, key)[0]
+
+
+def post_with_balance(api: str, path: str, body: dict, key: str) -> tuple[dict, int | None]:
+    """POST body; return the reply and X-Credits-Remaining (None if absent or unreadable)."""
     headers = {"Content-Type": "application/json", "X-API-Key": key}
     req = urllib.request.Request(api + path, json.dumps(body).encode(), headers)
     try:
-        return json.load(urllib.request.urlopen(req, timeout=600))
+        reply = urllib.request.urlopen(req, timeout=600)
+        return json.load(reply), balance_of(reply)
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
         sys.exit(http_failure(path, e, detail))
@@ -55,6 +81,34 @@ def post(api: str, path: str, body: dict, key: str) -> dict:
         sys.exit(f"error: lost the connection to the API at {api} ({e}). Try again.")
     except ValueError:
         sys.exit(f"error: {path} returned an unexpected reply (not JSON). Try again.")
+
+
+def balance_of(reply) -> int | None:
+    headers = getattr(reply, "headers", None)
+    value = headers.get("X-Credits-Remaining") if headers is not None else None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def count_reference(reference: Path | None) -> int:
+    return len(list(reference.glob("*.md"))) if reference and reference.is_dir() else 0
+
+
+def check(api: str, key: str, samples: Path, reference: Path | None) -> None:
+    """Spend 1 credit to show the key works, the balance and the build's cost."""
+    _, balance = post_with_balance(api, "/analyze/voice-profile", {"texts": [CHECK_TEXT]}, key)
+    print("key: OK")
+    print(f"balance: {balance} credits" if balance is not None else "balance: unknown")
+    if not (samples / "index.csv").is_file():
+        print(f"estimated cost: no samples in {samples} yet")
+        return
+    n, r = len(ranked_files(samples)), count_reference(reference)
+    cost = build_cost(n, r)
+    print(f"estimated cost: {cost} credits ({n} samples, {r} reference texts)")
+    if balance is not None and balance < cost:
+        print(f"short by {cost - balance} credits. {WAYS_OUT}")
 
 
 def http_failure(path: str, e: urllib.error.HTTPError, detail: str) -> str:
@@ -106,7 +160,7 @@ def main() -> None:
     ap.add_argument("--samples", type=Path, default=Path("samples"))
     ap.add_argument("--reference", type=Path, default=None,
                     help="optional directory of .md texts by other writers (recommended)")
-    ap.add_argument("--author", required=True, help="author name, recorded in the profile")
+    ap.add_argument("--author", help="author name, recorded in the profile (required unless --check)")
     ap.add_argument("--from", dest="senders", action="append", default=[],
                     help="author's address, recorded in the profile (repeatable)")
     ap.add_argument("--cutoff", default=None,
@@ -118,7 +172,12 @@ def main() -> None:
     ap.add_argument("--top", type=int, default=15,
                     help="samples joined into the voice profile (about 15 worked best in testing)")
     ap.add_argument("-o", "--out", type=Path, default=Path("voice-profile.json"))
+    ap.add_argument("--check", action="store_true",
+                    help="spend 1 credit to check the key; print the balance and the "
+                         "estimated cost of a build, write nothing")
     args = ap.parse_args()
+    if not args.check and not args.author:
+        ap.error("--author is required (except with --check)")
     if not args.api_key and args.api_key_file.is_file():
         # utf-8-sig: Notepad and PowerShell may save the file with a BOM
         args.api_key = args.api_key_file.read_text(encoding="utf-8-sig").strip()
@@ -126,6 +185,9 @@ def main() -> None:
         sys.exit(f"error: no API key. Save it in {args.api_key_file}, "
                  "or set TEXT_ANALYSIS_API_KEY, or pass --api-key.")
     api, key = args.api.rstrip("/"), args.api_key
+    if args.check:
+        check(api, key, args.samples, args.reference)
+        return
 
     files = ranked_files(args.samples)
     if not files:
@@ -136,9 +198,16 @@ def main() -> None:
     top_files = files[: args.top]
     reference_files = sorted(args.reference.glob("*.md")) if args.reference else []
     reference = [body(p) for p in reference_files]
+    cost = build_cost(len(texts), len(reference))
+    print(f"this build costs {cost} credits ({len(texts)} samples, {len(reference)} reference texts)")
 
-    voice_profile = post(api, "/analyze/voice-profile",
-                         {"texts": ["\n\n".join(texts[: args.top])]}, key)["results"][0]
+    reply, balance = post_with_balance(api, "/analyze/voice-profile",
+                                       {"texts": ["\n\n".join(texts[: args.top])]}, key)
+    voice_profile = reply["results"][0]
+    # No header means the balance is unknown: go on, and a 402 says if it runs out.
+    if balance is not None and balance < cost - 1:
+        sys.exit(f"error: this build costs {cost} credits and you have {balance} credits left "
+                 f"(1 spent checking the balance). {WAYS_OUT}")
 
     author_vectors = profiles(api, texts, key)
     reference_vectors = profiles(api, reference, key) if reference else []
