@@ -108,6 +108,27 @@ class ExtractRunTest(unittest.TestCase):
         texts, _ = self.extract("--max-samples", "0")
         self.assertEqual(len(texts), 4)
 
+    def test_default_cap_is_149(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        mbox = Path(tmp.name) / "big.mbox"
+        words = " ".join(f"word{i}" for i in range(20))
+        with open(mbox, "w", encoding="utf-8") as f:
+            for i in range(160):
+                f.write(f"From alex@example.com Tue Mar  1 09:00:00 2022\n"
+                        f"From: Alex Rivera <alex@example.com>\n"
+                        f"To: Jordan Lee <jordan@example.org>\n"
+                        f"Subject: Note {i}\n"
+                        f"Date: Tue, 01 Mar 2022 09:00:00 +0000\n\n"
+                        f"Message {i} {words}\n\n")
+        out = Path(tmp.name) / "out"
+        subprocess.run(
+            [sys.executable, str(SCRIPT), str(mbox), "--from", "ALEX@example.com",
+             "--min-words", "1", "--sig-min-count", "1000", "-o", str(out)],
+            capture_output=True, text=True, check=True)
+        with open(out / "index.csv", newline="", encoding="utf-8") as f:
+            self.assertEqual(len(list(csv.DictReader(f))), 149)
+
 
 if __name__ == "__main__":
     unittest.main()
