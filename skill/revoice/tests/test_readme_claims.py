@@ -1,4 +1,5 @@
 import pathlib
+import re
 import unittest
 
 README = pathlib.Path(__file__).resolve().parents[3] / "README.md"
@@ -114,6 +115,44 @@ class TestReadmeVersion(unittest.TestCase):
     def test_releases_link(self):
         self.assertIn("tagged releases", self.upgrading)
         self.assertIn("(https://github.com/samestrin/revoice-skill/releases)", self.upgrading)
+
+
+class TestReadmeExampleOutput(unittest.TestCase):
+    """Epic 16: the README shows the example voice's before-and-after before the API key step."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = README.read_text(encoding="utf-8")
+        start = cls.text.index("\n### What it looks like\n")
+        cls.start = start
+        cls.section = cls.text[start:cls.text.index("\n#", start + 1)]
+        example = (README.parent / "skill" / "revoice" / "assets" / "example.md").read_text(encoding="utf-8")
+        pair = example[example.index("\n## Before and after\n"):]
+        quotes = re.findall(r"(?m)((?:^>.*\n?)+)", pair)
+        cls.draft, cls.rewrite = (q.rstrip("\n") for q in quotes[:2])
+        do_not = example[example.index("\n## Do not\n"):example.index("\n## ", example.index("\n## Do not\n") + 1)]
+        cls.banned = re.findall(r'"([^"]+)"', do_not)
+
+    def test_before_save_api_key(self):
+        self.assertLess(self.start, self.text.index("\n## 2. Save your API key\n"))
+
+    def test_names_voice_example(self):
+        self.assertIn("--voice=example", self.section)
+
+    def test_says_fictional(self):
+        self.assertIn("fictional", self.section)
+
+    def test_shows_draft_and_rewrite_verbatim(self):
+        self.assertIn(self.draft, self.section)
+        self.assertIn(self.rewrite, self.section)
+        self.assertLess(self.section.index(self.draft), self.section.index(self.rewrite))
+
+    def test_rewrite_has_no_banned_phrase(self):
+        self.assertIn("I hope this email finds you well", self.banned)
+        self.assertIn("Kindly", self.banned)
+        for phrase in self.banned:
+            self.assertNotIn(phrase.lower(), self.rewrite.lower())
+        self.assertNotIn("—", self.rewrite)
 
 
 class TestReadmeCost(unittest.TestCase):
