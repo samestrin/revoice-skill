@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- README "What it looks like" section, under the install step and before "2. Save your API key": the before-and-after from the fictional example voice (`skill/revoice/assets/example.md`), a generic draft and its rewrite with `/revoice --voice=example`, so you see a result before you spend credits. `test_readme_claims.py` checks the pair matches `example.md` and the rewrite has none of the phrases that voice bans.
 - README "If the build stops" list: what to do for a wrong key (401), out of credits (402), too many requests (429) and an unreachable API, and that the build checks the key and the balance before it spends credits. `test_readme_claims.py` pins the four cases.
 - README "What a build costs" section: 1 credit per text, the formula 1 + kept samples + reference emails + min(kept samples, 100), two worked examples, and that a default build (148 samples, no reference set) plus the key check costs 250 credits, the free grant. "2. Save your API key" now has a Linux command.
 - README "Upgrading" says how to see the installed version (the `/plugin` screen), that fixes reach plugin users in tagged releases, and links to the repo's Releases page. `test_readme_claims.py` pins the link inside that section.

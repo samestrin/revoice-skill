@@ -100,6 +100,25 @@ You can try the skill before building your own voice, with the fictional example
 
 Until you have a config, always pass `--voice`: without it the skill does not know which voice to use and asks you to create the config. Without a config there is no default audience, relative paths are relative to the current folder, and SilverBullet (`sb:` paths and `--sync`) is off.
 
+### What it looks like
+
+This is the before-and-after that ships in the example voice file, `skill/revoice/assets/example.md`. The voice belongs to "Alex Example", a fictional person; nothing in it comes from a real mailbox. Pass a draft like the first one to `/revoice --voice=example` and you get text in that voice, like the second one.
+
+Generic AI-style draft:
+
+> Hello, I hope this email finds you well. I wanted to reach out regarding the project timeline. After careful consideration, it's worth noting that the current schedule is not robust. I would recommend that we add a buffer. Please let me know your thoughts at your earliest convenience.
+
+In the example voice:
+
+> Hi team,
+>
+> Quick note on the timeline. I think the current schedule is too tight, since one late delivery pushes everything back. Can we add a week of buffer?
+>
+> Happy to update the plan if that works.
+>
+> Thanks,
+> Alex
+
 ## Upgrading
 
 To see which version you have, run `/plugin` and open the installed `revoice` plugin; its screen shows the version.
