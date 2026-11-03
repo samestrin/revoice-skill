@@ -74,6 +74,32 @@ class BuildReviewTest(unittest.TestCase):
         self.assertRegex(phase, r"set aside any kept sample that clearly is not the author's own voice or language")
         self.assertRegex(phase, r"Say so in your report")
 
+    def test_phase_0_checks_the_key_and_balance(self):
+        phase = build_phase(0)
+        self.assertIn("test -s ~/.config/revoice/api-key", phase)
+        self.assertIn("build-profile.py --check", phase)
+        self.assertRegex(phase, r"pbpaste")
+        self.assertNotIn("test -s", build_phase(3))
+
+    def test_phase_3_reports_cost_and_balance(self):
+        phase = build_phase(3)
+        self.assertRegex(phase, r"Check the cost")
+        self.assertIn("--check --samples samples --reference reference", phase)
+        self.assertRegex(phase, r"balance is short")
+
+    def test_phase_5_names_each_failure(self):
+        phase = build_phase(5)
+        for code in ("401", "402", "429", "cannot reach the API"):
+            self.assertIn(code, phase)
+        self.assertIn("phase 0", phase)
+
+    def test_phase_1_reference_set_defaults_to_no(self):
+        phase = build_phase(1)
+        self.assertRegex(phase, r"Reference set:\*\* default no")
+        self.assertNotRegex(phase, r"Reference set:\*\* default yes")
+        self.assertIn("149", build_phase(2))
+        self.assertNotIn("200 samples", BUILD)
+
 
 def skill_step(n: int) -> str:
     match = re.search(rf"^## Step {n}:.*?(?=^## |\Z)", TEXT, re.M | re.S)

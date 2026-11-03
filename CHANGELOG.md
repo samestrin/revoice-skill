@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `--build` checks the API key and balance first: phase 0 now holds the key-file steps and runs `build-profile.py --check`, phase 3 is "Check the cost" (estimate and balance, ask before going on if short), phase 5 gives a plain line for 401, 402, 429 and an unreachable API, and the reference set is now opt-in (default no) with its credit cost.
 - `build-profile.py` counts what a build costs before it spends anything: 1 credit per text sent, so 1 + kept samples + reference texts + min(kept samples, 100). It reads the balance (`X-Credits-Remaining`) from its first call, and if that cannot cover the rest, it stops there (1 credit spent, no profile written) and prints the cost, the balance, and the two ways out: buy credits at yourvoice.dev, or rebuild with fewer samples or without `--reference`. If the API sends no balance, the build goes on.
 - `build-profile.py --check` spends 1 credit on a short fixed text, prints whether the key works, the balance and the estimated cost of a build from `--samples` and `--reference`, and writes no profile. `--author` is not needed with `--check`.
 - `Attribution check` CI job: a pull request fails if any commit has an author or committer other than the maintainer, or if a commit, the PR title or the PR body has a `Co-authored-by`, `Claude-Session` or `Generated with` line, so no tool or test identity is listed as a contributor.
