@@ -17,6 +17,11 @@ Rules for the whole build:
 1. Find Python (see above). Stop if there is no Python 3.10+.
 2. Check the helpers exist: `SKILL/build/mbox-filter-before.py`, `extract-samples.py`, `review-samples.py`, `build-profile.py`.
 3. If `~/.config/revoice/config.yaml` does not exist, copy `SKILL/config.example.yaml` there.
+4. Check the API key file: `test -s ~/.config/revoice/api-key`. If it is missing or empty, tell the user to create it themselves and wait. Give them the command for their system:
+   - Windows: `notepad "$HOME\.config\revoice\api-key"` (in PowerShell), paste the key, save, close.
+   - macOS: copy the key, then `pbpaste > ~/.config/revoice/api-key`.
+   - Linux: `nano ~/.config/revoice/api-key`, paste, save.
+5. Run `<python> SKILL/build/build-profile.py --check`. It spends 1 credit and says whether the key works and what the balance is. If it fails, say what it printed in plain words (see phase 5 for 401, 402, 429 and "cannot reach the API") and stop, so a wrong key or an empty balance shows before the mbox steps.
 
 ## Phase 1: Ask
 
@@ -26,7 +31,7 @@ Take any answers already given in the arguments (for example `mbox=...`, `from=.
 2. **Addresses:** every address the user has sent from.
 3. **Name:** their full name. Suggest a slug from it (`joe-smith`) and use it unless they give another.
 4. **Cutoff date:** default `2022-09-01` (three months before ChatGPT launched), to keep AI-assisted writing out.
-5. **Reference set:** default yes. It compares their writing with other people's email in the same export, so their signature phrases come out specific instead of generic.
+5. **Reference set:** default no. Offer it as opt-in, and say it costs extra API credits. It compares their writing with other people's email in the same export, so their signature phrases come out specific instead of generic.
 6. **Work folder:** default `~/revoice-build/<slug>`. Their samples go here, not in the skill.
 
 Then check the mbox path exists, and create `WORK`.
@@ -38,18 +43,20 @@ Run from `WORK`:
 ```
 <python> SKILL/build/mbox-filter-before.py "<mbox>" --before <cutoff> -o pre-ai.mbox
 <python> SKILL/build/extract-samples.py pre-ai.mbox --from <addr1> --from <addr2> -o samples
-<python> SKILL/build/extract-samples.py pre-ai.mbox --from <addr1> --from <addr2> --others -o reference   (only if the reference set is on)
+<python> SKILL/build/extract-samples.py pre-ai.mbox --from <addr1> --from <addr2> --others -o reference   (only if the reference set is on; it is off by default)
 ```
 
 Report: messages kept by the date filter, samples written, and the top drop reasons. If there are fewer than 20 samples, say so and offer to rerun extraction with `--min-words 100` (the default is 150). Extraction keeps at most 149 samples, the longest first; if it reports samples over the cap, say how many were left out.
 
-## Phase 3: Check the API key
+## Phase 3: Check the cost
 
-Check `test -s ~/.config/revoice/api-key`. If it is missing or empty, tell the user to create it themselves and wait. Give them the command for their system:
+After extraction, run from `WORK`:
 
-- Windows: `notepad "$HOME\.config\revoice\api-key"` (in PowerShell), paste the key, save, close.
-- macOS: copy the key, then `pbpaste > ~/.config/revoice/api-key`.
-- Linux: `nano ~/.config/revoice/api-key`, paste, save.
+```
+<python> SKILL/build/build-profile.py --check --samples samples --reference reference
+```
+
+Leave out `--reference reference` if the reference set is off. Report the estimated credit cost and the balance. If the balance is short, say so and ask before going on.
 
 ## Phase 4: Review the samples
 
@@ -69,7 +76,12 @@ From `WORK`:
 <python> SKILL/build/build-profile.py --samples samples --reference reference --author "<Name>" --from <addr1> --from <addr2> --cutoff <cutoff> -o voice-profile.json
 ```
 
-Leave out `--reference reference` if the reference set is off. It sends the kept samples to the API at https://api.yourvoice.dev/ and can take a minute. If it reports a 401, the key is wrong; send the user back to phase 3.
+Leave out `--reference reference` if the reference set is off. It sends the kept samples to the API at https://api.yourvoice.dev/ and can take a minute. If it fails, tell the user in one plain line and stop:
+
+- 401: the key is wrong; send the user back to phase 0.
+- 402: out of credits; they need to add credits, then rerun.
+- 429: too many requests; wait a few minutes and rerun.
+- cannot reach the API: check the internet connection, then rerun.
 
 ## Phase 6: Write the voice file
 
