@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - `extract-samples.py --max-samples` now defaults to 149 instead of 200, so a default build (1 + 149 + 100 credits with the reference set off) fits the 250 free credits. Pass a larger number, or `0` for no cap, to keep more.
+- `build-profile.py` turns API failures into one plain line with no traceback: 401 (key rejected), 402 (balance and cost), 429 (seconds to wait from `Retry-After`) and an unreachable API. A failed `/health` call now records the API version as null and still writes the profile.
+
 - `--build` now defaults to the production API, `https://api.yourvoice.dev`, instead of the dev server `https://text-analysis-api.estr.in`; the README and `build.md` name the new address. Pass `--api` to use another server.
 - Voice profiles now live in `~/.config/revoice/voices/`, outside the skill folder, so updating the skill (or the plugin) never deletes them: `--build` saves the new voice there, `--sync` writes there, and `/revoice` reads a voice from there first, then from the skill's own `assets/` (which now ships only `example.md`, so `--voice=example` still works). Move any voice files you kept in the skill's `assets/` folder to `~/.config/revoice/voices/`; `sync.py` refuses a voice slug that is not a plain file name.
 - `SKILL.md` names its own folder with `${CLAUDE_SKILL_DIR}` instead of `~/.claude/skills/revoice/` (in the body and in `allowed-tools`), so the skill finds `build.md`, `sync.py` and the bundled voices whether it was installed as a plugin or by copying the folder. A test fails on any hard-coded install path, and on a `SKILL.md` without `name: revoice` (the field that keeps the bare `/revoice` command under a plugin).
