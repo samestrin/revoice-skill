@@ -128,5 +128,51 @@ class TestReadmeCost(unittest.TestCase):
         self.assertIn("\n## 1. Install the skill\n", self.text)
 
 
+class TestReadmeTroubleshooting(unittest.TestCase):
+    """Epic 14: the README says what to do when the build stops."""
+
+    @classmethod
+    def setUpClass(cls):
+        text = README.read_text(encoding="utf-8")
+        start = text.index("### If the build stops")
+        cls.section = text[start:text.index("\n## ", start)]
+        cls.items = [line for line in cls.section.splitlines() if line.startswith("- **")]
+
+    def item(self, name):
+        found = [line for line in self.items if line.startswith(f"- **{name}**")]
+        self.assertEqual(len(found), 1, f"no single '{name}' item")
+        return found[0]
+
+    def test_checks_key_and_balance_before_spending(self):
+        self.assertIn("checks your key and your balance before it spends credits", self.section)
+
+    def test_four_cases(self):
+        self.assertEqual(len(self.items), 4)
+
+    def test_wrong_key(self):
+        line = self.item("Wrong key")
+        self.assertIn("HTTP 401", line)
+        self.assertIn("~/.config/revoice/api-key", line)
+
+    def test_out_of_credits(self):
+        line = self.item("Out of credits")
+        self.assertIn('"out of credits", HTTP 402 from the API;', line)
+        # "short by N credits" comes from the free cost check, not from a 402.
+        self.assertNotIn('"short by N credits", HTTP 402', line)
+        self.assertIn('before your samples are sent, "short by N credits" from the cost check', line)
+        self.assertIn('"this build costs N credits and you have M credits left"', line)
+        self.assertIn("buy a credit pack at https://yourvoice.dev/", line)
+        self.assertIn("fewer samples or without the reference set", line)
+
+    def test_too_many_requests(self):
+        line = self.item("Too many requests")
+        self.assertIn("HTTP 429", line)
+        self.assertIn("wait the number of seconds it says", line)
+
+    def test_cannot_reach_the_api(self):
+        line = self.item("Cannot reach the API")
+        self.assertIn("check your internet connection", line)
+
+
 if __name__ == "__main__":
     unittest.main()
