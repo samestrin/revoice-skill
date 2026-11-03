@@ -17,9 +17,14 @@ FEATURES = {"avg_sentence_length": 10.0, "contractions": 0.5}
 class FakeAPI:
     """Stands in for urllib.request.urlopen; records every request, no network."""
 
-    def __init__(self, fail_path=None):
+    def __init__(self, fail_path=None, fail_code=402, fail_body=None, fail_headers=None,
+                 fail_exc=None):
         self.requests = []
         self.fail_path = fail_path
+        self.fail_code = fail_code
+        self.fail_body = fail_body if fail_body is not None else b'{"detail": "out of credits"}'
+        self.fail_headers = fail_headers or {}
+        self.fail_exc = fail_exc
 
     def __call__(self, req, timeout=None):
         url = req if isinstance(req, str) else req.full_url
@@ -28,8 +33,10 @@ class FakeAPI:
         headers = {} if isinstance(req, str) else dict(req.header_items())
         self.requests.append({"path": path, "body": body, "headers": headers, "timeout": timeout})
         if path == self.fail_path:
-            raise urllib.error.HTTPError(url, 402, "Payment Required", {},
-                                         io.BytesIO(b'{"detail": "out of credits"}'))
+            if self.fail_exc:
+                raise self.fail_exc
+            raise urllib.error.HTTPError(url, self.fail_code, "Error", self.fail_headers,
+                                         io.BytesIO(self.fail_body))
         if path == "/analyze/voice-profile":
             n = len(body["texts"])
             reply = {"results": [{"feature_vector": dict(FEATURES), "summary": "s"} for _ in range(n)]}
@@ -157,6 +164,51 @@ class BuildProfileTest(unittest.TestCase):
         self.assertEqual(str(cm.exception),
                          'error: /analyze/fingerprint returned HTTP 402: {"detail": "out of credits"}')
         self.assertFalse(self.out.exists())
+
+    def fail_message(self, **kw):
+        self.reviewed_samples()
+        with self.assertRaises(SystemExit) as cm:
+            self.build(api=FakeAPI(fail_path="/analyze/voice-profile", **kw))
+        self.assertFalse(self.out.exists())
+        return str(cm.exception)
+
+    def test_401_says_key_wrong(self):
+        self.assertIn("rejected the key", self.fail_message(fail_code=401))
+
+    def test_402_reports_balance_and_cost(self):
+        msg = self.fail_message(
+            fail_body=b'{"error":"insufficient_credits","balance":12,"cost":40}')
+        self.assertEqual(msg, "error: out of credits: balance 12, this build costs 40. "
+                              "Add credits and try again.")
+
+    def test_429_reports_retry_after(self):
+        msg = self.fail_message(fail_code=429, fail_headers={"Retry-After": "30"})
+        self.assertIn("Wait 30 seconds", msg)
+
+    def test_429_without_retry_after_has_no_none(self):
+        msg = self.fail_message(fail_code=429)
+        self.assertIn("Wait a little and try again.", msg)
+        self.assertNotIn("None", msg)
+
+    def test_timeout_while_reading_reply_is_one_line(self):
+        msg = self.fail_message(fail_exc=TimeoutError("timed out"))
+        self.assertIn("lost the connection", msg)
+
+    def test_non_json_reply_is_one_line(self):
+        msg = self.fail_message(fail_exc=ValueError("bad json"))
+        self.assertIn("unexpected reply", msg)
+
+    def test_unreachable_api_says_so(self):
+        msg = self.fail_message(fail_exc=urllib.error.URLError("refused"))
+        self.assertIn("cannot reach the API at https://api.test", msg)
+        self.assertNotIn("Traceback", msg)
+
+    def test_failed_health_still_writes_profile_with_null_version(self):
+        self.reviewed_samples()
+        api = FakeAPI(fail_path="/health", fail_exc=urllib.error.URLError("down"))
+        self.build(api=api)
+        profile = json.loads(self.out.read_text())
+        self.assertIsNone(profile["meta"]["api"]["version"])
 
     def test_missing_key_exits_before_any_request(self):
         self.reviewed_samples()

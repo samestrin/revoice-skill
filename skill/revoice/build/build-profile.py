@@ -47,7 +47,31 @@ def post(api: str, path: str, body: dict, key: str) -> dict:
         return json.load(urllib.request.urlopen(req, timeout=600))
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
-        sys.exit(f"error: {path} returned HTTP {e.code}: {detail}")
+        sys.exit(http_failure(path, e, detail))
+    except urllib.error.URLError as e:
+        sys.exit(f"error: cannot reach the API at {api} ({e.reason}). "
+                 "Check the address and your connection.")
+    except OSError as e:  # timeout or reset while reading the reply
+        sys.exit(f"error: lost the connection to the API at {api} ({e}). Try again.")
+    except ValueError:
+        sys.exit(f"error: {path} returned an unexpected reply (not JSON). Try again.")
+
+
+def http_failure(path: str, e: urllib.error.HTTPError, detail: str) -> str:
+    if e.code == 401:
+        return "error: the API rejected the key (HTTP 401). Check the key and try again."
+    if e.code == 402:
+        try:
+            info = json.loads(detail)
+            return (f"error: out of credits: balance {info['balance']}, this build costs "
+                    f"{info['cost']}. Add credits and try again.")
+        except (ValueError, KeyError, TypeError):
+            pass
+    if e.code == 429:
+        wait = e.headers.get("Retry-After") if e.headers else None
+        return ("error: rate limited (HTTP 429). "
+                + (f"Wait {wait} seconds and try again." if wait else "Wait a little and try again."))
+    return f"error: {path} returned HTTP {e.code}: {detail}"
 
 
 def profiles(api: str, texts: list[str], key: str) -> list[dict]:
@@ -139,7 +163,10 @@ def main() -> None:
         fp_body["options"] = {"reference_texts": fp_reference}
     fp = post(api, "/analyze/fingerprint", fp_body, key)
 
-    health = json.load(urllib.request.urlopen(api + "/health", timeout=30))
+    try:
+        health = json.load(urllib.request.urlopen(api + "/health", timeout=30))
+    except (OSError, ValueError):
+        health = {}  # the version is informational; still write the profile
 
     source = "email export, attachments ignored, reviewed samples"
     if args.cutoff:
