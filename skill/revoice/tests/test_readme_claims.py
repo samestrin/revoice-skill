@@ -98,6 +98,22 @@ class TestReadmePluginInstall(unittest.TestCase):
         self.assertIn("/plugin uninstall revoice@revoice-skill", self.text)
 
 
+class TestReadmeVersion(unittest.TestCase):
+    """Epic 16: Upgrading says how to see the installed version and where releases are."""
+
+    @classmethod
+    def setUpClass(cls):
+        text = README.read_text(encoding="utf-8")
+        start = text.index("\n## Upgrading\n")
+        cls.upgrading = text[start:text.index("\n## ", start + 1)]
+
+    def test_how_to_see_installed_version(self):
+        self.assertIn("To see which version you have", self.upgrading)
+        self.assertIn("`/plugin`", self.upgrading)
+
+    def test_releases_link(self):
+        self.assertIn("tagged releases", self.upgrading)
+        self.assertIn("(https://github.com/samestrin/revoice-skill/releases)", self.upgrading)
 
 
 class TestReadmeCost(unittest.TestCase):

@@ -102,6 +102,10 @@ Until you have a config, always pass `--voice`: without it the skill does not kn
 
 ## Upgrading
 
+To see which version you have, run `/plugin` and open the installed `revoice` plugin; its screen shows the version.
+
+Fixes reach plugin users in tagged releases: `/plugin update` gets a new version only after one is released. See the [Releases page](https://github.com/samestrin/revoice-skill/releases) for each version and what changed.
+
 With the plugin install, update through `/plugin`:
 
 ```
