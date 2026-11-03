@@ -108,7 +108,7 @@ class ExtractRunTest(unittest.TestCase):
         texts, _ = self.extract("--max-samples", "0")
         self.assertEqual(len(texts), 4)
 
-    def test_default_cap_is_149(self):
+    def test_default_cap_is_148(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         mbox = Path(tmp.name) / "big.mbox"
@@ -127,7 +127,7 @@ class ExtractRunTest(unittest.TestCase):
              "--min-words", "1", "--sig-min-count", "1000", "-o", str(out)],
             capture_output=True, text=True, check=True)
         with open(out / "index.csv", newline="", encoding="utf-8") as f:
-            self.assertEqual(len(list(csv.DictReader(f))), 149)
+            self.assertEqual(len(list(csv.DictReader(f))), 148)
 
 
 if __name__ == "__main__":

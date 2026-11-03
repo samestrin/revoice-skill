@@ -84,7 +84,9 @@ class BuildReviewTest(unittest.TestCase):
     def test_phase_3_reports_cost_and_balance(self):
         phase = build_phase(3)
         self.assertRegex(phase, r"Check the cost")
-        self.assertIn("--check --samples samples --reference reference", phase)
+        # Free: phase 0's --check already spent the one credit (Epic 14 T7).
+        self.assertIn("--estimate --balance <balance> --samples samples --reference reference", phase)
+        self.assertNotIn("--check", phase)
         self.assertRegex(phase, r"balance is short")
 
     def test_phase_5_names_each_failure(self):
@@ -97,7 +99,7 @@ class BuildReviewTest(unittest.TestCase):
         phase = build_phase(1)
         self.assertRegex(phase, r"Reference set:\*\* default no")
         self.assertNotRegex(phase, r"Reference set:\*\* default yes")
-        self.assertIn("149", build_phase(2))
+        self.assertIn("148", build_phase(2))
         self.assertNotIn("200 samples", BUILD)
 
 
