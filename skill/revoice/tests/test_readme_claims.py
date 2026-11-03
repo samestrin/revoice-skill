@@ -156,7 +156,11 @@ class TestReadmeTroubleshooting(unittest.TestCase):
 
     def test_out_of_credits(self):
         line = self.item("Out of credits")
-        self.assertIn("HTTP 402", line)
+        self.assertIn('"out of credits", HTTP 402 from the API;', line)
+        # "short by N credits" comes from the free cost check, not from a 402.
+        self.assertNotIn('"short by N credits", HTTP 402', line)
+        self.assertIn('before your samples are sent, "short by N credits" from the cost check', line)
+        self.assertIn('"this build costs N credits and you have M credits left"', line)
         self.assertIn("buy a credit pack at https://yourvoice.dev/", line)
         self.assertIn("fewer samples or without the reference set", line)
 
