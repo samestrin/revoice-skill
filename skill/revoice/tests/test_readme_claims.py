@@ -48,7 +48,10 @@ class TestReadmeLocalReview(unittest.TestCase):
         self.assertIn("The KEEP/DROP review runs on your machine and sends nothing anywhere.", p)
         self.assertIn("only the kept samples (up to the 148 extracted, sent in batches of 100;", p)
         self.assertIn("the fingerprint step uses at most 100 of them)", p)
-        self.assertIn("plus the reference set", p)
+        self.assertIn("only if you opt in, the reference set", p)
+        self.assertIn("off by default", p)
+        self.assertNotIn("on by default", p)
+        self.assertNotIn("up to the 200", p)
         self.assertIn("Rewriting text with `/revoice` never touches the API.", p)
 
     def test_how_it_works_review_is_local(self):
@@ -93,6 +96,36 @@ class TestReadmePluginInstall(unittest.TestCase):
     def test_update_and_uninstall_through_plugin(self):
         self.assertIn("/plugin update revoice@revoice-skill", self.text)
         self.assertIn("/plugin uninstall revoice@revoice-skill", self.text)
+
+
+
+
+class TestReadmeCost(unittest.TestCase):
+    """Epic 14: the README says what a build costs and how to save the key on Linux."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = README.read_text(encoding="utf-8")
+
+    def test_per_text_cost_and_formula(self):
+        self.assertIn("1 credit per text", self.text)
+        self.assertIn("cost = 1 + kept samples + reference emails + min(kept samples, 100)", self.text)
+
+    def test_examples(self):
+        self.assertIn("1 + 30 + 0 + 30 = 61 credits", self.text)
+        self.assertIn("1 + 149 + 200 + 100 = 450 credits", self.text)
+
+    def test_default_fits_free_grant(self):
+        self.assertIn("at most 148 samples, no reference set", self.text)
+        self.assertIn("1 + 148 + 100 = 249 credits, plus 1 for the key check: 250, exactly the free grant", self.text)
+
+    def test_linux_key_command(self):
+        self.assertIn("Linux:", self.text)
+        self.assertIn("chmod 600 ~/.config/revoice/api-key", self.text)
+        self.assertIn("xclip", self.text)
+
+    def test_install_heading_unchanged(self):
+        self.assertIn("\n## 1. Install the skill\n", self.text)
 
 
 if __name__ == "__main__":
