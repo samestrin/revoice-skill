@@ -32,7 +32,18 @@ Getting started is three steps: install the skill, save your API key, and run `/
 
 Only `--build` uses the key, and only to call `https://api.yourvoice.dev/`. Using `/revoice` to rewrite text never touches the API.
 
-Building the profile charges credits per text sent; the API's docs at https://api.yourvoice.dev/ say what each request costs.
+### What a build costs
+
+The API charges 1 credit per text it analyzes. A build sends one joined text, every kept sample, every reference email, and up to 100 of the kept samples again for the fingerprint, so:
+
+```text
+cost = 1 + kept samples + reference emails + min(kept samples, 100)
+```
+
+- A small mailbox with 30 kept samples and no reference set: 1 + 30 + 0 + 30 = 61 credits.
+- 149 kept samples plus 200 reference emails: 1 + 149 + 200 + 100 = 450 credits (add 1 for the key check).
+
+A default build (at most 148 samples, no reference set) costs at most 1 + 148 + 100 = 249 credits, plus 1 for the key check: 250, exactly the free grant. The re-check before the build spends anything is the free `--estimate`. Adding the reference set costs more: one extra credit per reference email, so you need to buy a credit pack first if that takes the total over your balance. The build checks your balance before it spends and stops if it cannot cover the cost. The API's docs at https://api.yourvoice.dev/ list what each request costs.
 
 ## Text analysis API
 
@@ -142,6 +153,14 @@ macOS: copy the key, then:
 mkdir -p ~/.config/revoice && pbpaste > ~/.config/revoice/api-key
 ```
 
+Linux: copy the key, then:
+
+```bash
+mkdir -p ~/.config/revoice && (xclip -selection clipboard -o 2>/dev/null || wl-paste) > ~/.config/revoice/api-key && chmod 600 ~/.config/revoice/api-key
+```
+
+No clipboard tool? Run `mkdir -p ~/.config/revoice && cat > ~/.config/revoice/api-key`, paste the key, press Enter, then Ctrl-D, then `chmod 600 ~/.config/revoice/api-key`.
+
 ## 3. Build your voice profile
 
 First export your sent mail. For Gmail, use Google Takeout, choose Mail, and pick only the "Sent" label. You get an `.mbox` file. Large exports are fine.
@@ -162,7 +181,7 @@ You can also give the answers up front:
 
 Read the voice file it wrote (`~/.config/revoice/voices/<your-slug>.md`) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
-**What leaves your machine.** The full mailbox never does. The build pulls out up to 148 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The KEEP/DROP review runs on your machine and sends nothing anywhere. To build the profile, the text analysis API gets, over HTTPS, only the kept samples (up to the 148 extracted, sent in batches of 100; the fingerprint step uses at most 100 of them) plus the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The reference set is on by default; answer no to it in the build questions to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. Rewriting text with `/revoice` never touches the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
+**What leaves your machine.** The full mailbox never does. The build pulls out up to 148 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The KEEP/DROP review runs on your machine and sends nothing anywhere. To build the profile, the text analysis API gets, over HTTPS, only the kept samples (up to the 148 extracted, sent in batches of 100; the fingerprint step uses at most 100 of them) plus, only if you opt in, the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The reference set is off by default and costs extra credits; leave it off to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. Rewriting text with `/revoice` never touches the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
 
 Windows (PowerShell): `Remove-Item -Recurse -Force "$HOME\revoice-build\<your-slug>"`
 
