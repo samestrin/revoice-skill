@@ -4,7 +4,7 @@ description: Rewrite a body of text so it reads like a specific person wrote it,
 argument-hint: '[--voice=<slug>] [--audience=casual|business|formal] [--template=[sb:]<path>] [--output-path=[sb:]<path>] (@file | <text>)  |  --sync[=<slug>]  |  --build'
 allowed-tools: Read, Write, Bash(ls:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(python:*), Bash(python3:*), mcp__silverbullet__read-note, mcp__silverbullet__create-note
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # revoice

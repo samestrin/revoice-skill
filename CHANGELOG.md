@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-03
+
 ### Added
 
 - README "What it looks like" section, under the install step and before "2. Save your API key": the before-and-after from the fictional example voice (`skill/revoice/assets/example.md`), a generic draft and its rewrite with `/revoice --voice=example`, so you see a result before you spend credits. `test_readme_claims.py` checks the pair matches `example.md` and the rewrite has none of the phrases that voice bans.
