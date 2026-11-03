@@ -21,7 +21,7 @@ Rules for the whole build:
    - Windows: `notepad "$HOME\.config\revoice\api-key"` (in PowerShell), paste the key, save, close.
    - macOS: copy the key, then `pbpaste > ~/.config/revoice/api-key`.
    - Linux: `nano ~/.config/revoice/api-key`, paste, save.
-5. Run `<python> SKILL/build/build-profile.py --check`. It spends 1 credit and says whether the key works and what the balance is. If it fails, say what it printed in plain words (see phase 5 for 401, 402, 429 and "cannot reach the API") and stop, so a wrong key or an empty balance shows before the mbox steps.
+5. Run `<python> SKILL/build/build-profile.py --check`. It spends 1 credit and says whether the key works and what the balance is. Note the balance: phase 3 uses it. If it fails, say what it printed in plain words (see phase 5 for 401, 402, 429 and "cannot reach the API") and stop, so a wrong key or an empty balance shows before the mbox steps.
 
 ## Phase 1: Ask
 
@@ -46,17 +46,17 @@ Run from `WORK`:
 <python> SKILL/build/extract-samples.py pre-ai.mbox --from <addr1> --from <addr2> --others -o reference   (only if the reference set is on; it is off by default)
 ```
 
-Report: messages kept by the date filter, samples written, and the top drop reasons. If there are fewer than 20 samples, say so and offer to rerun extraction with `--min-words 100` (the default is 150). Extraction keeps at most 149 samples, the longest first; if it reports samples over the cap, say how many were left out.
+Report: messages kept by the date filter, samples written, and the top drop reasons. If there are fewer than 20 samples, say so and offer to rerun extraction with `--min-words 100` (the default is 150). Extraction keeps at most 148 samples, the longest first; if it reports samples over the cap, say how many were left out.
 
 ## Phase 3: Check the cost
 
 After extraction, run from `WORK`:
 
 ```
-<python> SKILL/build/build-profile.py --check --samples samples --reference reference
+<python> SKILL/build/build-profile.py --estimate --balance <balance> --samples samples --reference reference
 ```
 
-Leave out `--reference reference` if the reference set is off. Report the estimated credit cost and the balance. If the balance is short, say so and ask before going on.
+`<balance>` is the balance phase 0 printed; leave out `--balance` if it said "unknown". This calls no API and spends nothing: phase 0 already checked the key, and the 148-sample default with one paid check fits the 250 free credits exactly. Leave out `--reference reference` if the reference set is off. Report the estimated credit cost and the balance. If the balance is short, say so and ask before going on.
 
 ## Phase 4: Review the samples
 
