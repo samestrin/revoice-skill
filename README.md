@@ -187,6 +187,15 @@ Windows (PowerShell): `Remove-Item -Recurse -Force "$HOME\revoice-build\<your-sl
 
 macOS or Linux: `rm -rf ~/revoice-build/<your-slug>`
 
+### If the build stops
+
+The build checks your key and your balance before it spends credits on the build: its first step spends 1 credit to test the key and read the balance, before the mbox steps, and it counts the build's cost before it sends your samples. If something goes wrong, it stops with one plain line:
+
+- **Wrong key** ("the API rejected the key", HTTP 401): check `~/.config/revoice/api-key` holds the key from your yourvoice.dev dashboard with nothing else in the file, save it again (see "2. Save your API key"), then rerun `/revoice --build`.
+- **Out of credits** ("out of credits" or "short by N credits", HTTP 402): buy a credit pack at https://yourvoice.dev/, or rebuild with fewer samples or without the reference set, then rerun.
+- **Too many requests** ("rate limited", HTTP 429): wait the number of seconds it says (or a few minutes), then rerun.
+- **Cannot reach the API** ("cannot reach the API"): check your internet connection and that https://api.yourvoice.dev/ answers, then rerun.
+
 ## Use the skill
 
 | Command | What it does |
