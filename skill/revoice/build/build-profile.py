@@ -51,6 +51,10 @@ def post(api: str, path: str, body: dict, key: str) -> dict:
     except urllib.error.URLError as e:
         sys.exit(f"error: cannot reach the API at {api} ({e.reason}). "
                  "Check the address and your connection.")
+    except OSError as e:  # timeout or reset while reading the reply
+        sys.exit(f"error: lost the connection to the API at {api} ({e}). Try again.")
+    except ValueError:
+        sys.exit(f"error: {path} returned an unexpected reply (not JSON). Try again.")
 
 
 def http_failure(path: str, e: urllib.error.HTTPError, detail: str) -> str:

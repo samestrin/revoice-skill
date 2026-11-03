@@ -185,6 +185,19 @@ class BuildProfileTest(unittest.TestCase):
         msg = self.fail_message(fail_code=429, fail_headers={"Retry-After": "30"})
         self.assertIn("Wait 30 seconds", msg)
 
+    def test_429_without_retry_after_has_no_none(self):
+        msg = self.fail_message(fail_code=429)
+        self.assertIn("Wait a little and try again.", msg)
+        self.assertNotIn("None", msg)
+
+    def test_timeout_while_reading_reply_is_one_line(self):
+        msg = self.fail_message(fail_exc=TimeoutError("timed out"))
+        self.assertIn("lost the connection", msg)
+
+    def test_non_json_reply_is_one_line(self):
+        msg = self.fail_message(fail_exc=ValueError("bad json"))
+        self.assertIn("unexpected reply", msg)
+
     def test_unreachable_api_says_so(self):
         msg = self.fail_message(fail_exc=urllib.error.URLError("refused"))
         self.assertIn("cannot reach the API at https://api.test", msg)
