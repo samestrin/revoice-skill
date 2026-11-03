@@ -41,7 +41,7 @@ Run from `WORK`:
 <python> SKILL/build/extract-samples.py pre-ai.mbox --from <addr1> --from <addr2> --others -o reference   (only if the reference set is on)
 ```
 
-Report: messages kept by the date filter, samples written, and the top drop reasons. If there are fewer than 20 samples, say so and offer to rerun extraction with `--min-words 100` (the default is 150). Extraction keeps at most 200 samples, the longest first; if it reports samples over the cap, say how many were left out.
+Report: messages kept by the date filter, samples written, and the top drop reasons. If there are fewer than 20 samples, say so and offer to rerun extraction with `--min-words 100` (the default is 150). Extraction keeps at most 149 samples, the longest first; if it reports samples over the cap, say how many were left out.
 
 ## Phase 3: Check the API key
 
