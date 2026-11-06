@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `Release` workflow: pushing a `v0.2.0`-form tag checks that the version without its `v` equals `plugin.json` `version`, `SKILL.md` `metadata.version` and the newest released `CHANGELOG.md` heading, runs the unit tests, then creates the GitHub release with that version's CHANGELOG section as its notes. A tag that disagrees fails before any release is made. Only the release job can write to the repo. `.github/scripts/release-notes.py` prints the section; `test_release_notes.py` covers it.
+
 ## [0.2.0] - 2026-11-03
 
 ### Added
