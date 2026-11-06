@@ -31,6 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     container: node:24
     timeout-minutes: 10
+    # In a job container `run:` defaults to sh; the steps use bash.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
