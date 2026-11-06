@@ -1,0 +1,95 @@
+name: Install test
+
+# Installs the skill the two ways the README gives, each into a fresh HOME, and
+# checks the installed copy. No API key and no model call: the plugin commands
+# and the helpers' --help need neither.
+#
+# `pull_request`, never `pull_request_target`: fork PRs run with a read-only
+# token and no secrets.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # The CLI version the install path below was checked on. Raise it on purpose.
+  CLAUDE_CODE_VERSION: 2.1.318
+  DISABLE_AUTOUPDATER: "1"
+
+jobs:
+  install:
+    name: Plugin and copy-folder install
+    # GitHub-hosted; node:24 is the image the board ran the manual install in.
+    runs-on: ubuntu-latest
+    container: node:24
+    timeout-minutes: 10
+    # In a job container `run:` defaults to sh; the steps use bash.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # The checkout belongs to the runner user, the container runs as root.
+      - name: Trust the checkout
+        run: |
+          test -d "$GITHUB_WORKSPACE/.git" || { echo "::error::checkout has no .git (git missing from the image?)"; exit 1; }
+          git config --system --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}
+        run: |
+          npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          claude --version
+
+      - name: Validate the plugin
+        run: claude plugin validate .
+
+      - name: Plugin install into a fresh HOME
+        run: |
+          export HOME="$RUNNER_TEMP/home-plugin"
+          rm -rf "$HOME" && mkdir -p "$HOME"
+          claude plugin marketplace add "$GITHUB_WORKSPACE"
+          claude plugin install revoice@revoice-skill
+          version="$(node -p 'require("./.claude-plugin/plugin.json").version')"
+          installed="$HOME/.claude/plugins/cache/revoice-skill/revoice/$version/skill/revoice"
+          bash .github/scripts/check-installed-skill.sh "$installed" "$GITHUB_WORKSPACE"
+
+      # The README's own commands (the clone, then the macOS or Linux block),
+      # read from README.md so a change there is tested. The clone comes from
+      # this checkout instead of GitHub, so a PR tests its own tree.
+      - name: Copy-folder install into a fresh HOME
+        run: |
+          export HOME="$RUNNER_TEMP/home-copy"
+          rm -rf "$HOME" && mkdir -p "$HOME"
+          readme="$GITHUB_WORKSPACE/README.md"
+          url="https://github.com/samestrin/revoice-skill.git"
+          bash_block_after() {
+            awk -v start="$1" '
+              $0 == start { found = 1; next }
+              found && /^```bash$/ { inside = 1; next }
+              inside && /^```$/ { exit }
+              inside { print }
+            ' "$readme"
+          }
+          clone="$(bash_block_after '### Alternative: copy the folder')"
+          copy="$(bash_block_after 'macOS or Linux:')"
+          grep -qF "git clone $url" <<< "$clone" || { echo "::error::README clone block not found or changed"; exit 1; }
+          grep -qF 'cp -R skill/revoice' <<< "$copy" || { echo "::error::README macOS or Linux block not found or changed"; exit 1; }
+          # The README then runs `cd revoice-skill`, so the source keeps that name.
+          src="$RUNNER_TEMP/copy-src/revoice-skill"
+          rm -rf "$RUNNER_TEMP/copy-src" && mkdir -p "$RUNNER_TEMP/copy-src"
+          ln -s "$GITHUB_WORKSPACE" "$src"
+          clone="${clone//"$url"/"$src"}"
+          work="$RUNNER_TEMP/copy-work"
+          rm -rf "$work" && mkdir -p "$work" && cd "$work"
+          printf '%s\n' "== README clone:" "$clone" "== README macOS or Linux:" "$copy"
+          bash -euxc "$clone"$'\n'"$copy"
+          bash "$GITHUB_WORKSPACE/.github/scripts/check-installed-skill.sh" "$HOME/.claude/skills/revoice" "$GITHUB_WORKSPACE"
