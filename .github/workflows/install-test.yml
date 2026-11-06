@@ -93,3 +93,40 @@ jobs:
           printf '%s\n' "== README clone:" "$clone" "== README macOS or Linux:" "$copy"
           bash -euxc "$clone"$'\n'"$copy"
           bash "$GITHUB_WORKSPACE/.github/scripts/check-installed-skill.sh" "$HOME/.claude/skills/revoice" "$GITHUB_WORKSPACE"
+
+      # A marketplace added from the repo path is read in place, so `plugin
+      # update` there finds nothing. Install from a temp copy instead, raise the
+      # copy's version, and update. The voice files live under ~/.config/revoice
+      # and must survive the update and stay out of the plugin folder.
+      - name: Upgrade keeps voices
+        run: |
+          export HOME="$RUNNER_TEMP/home-upgrade"
+          rm -rf "$HOME" && mkdir -p "$HOME"
+          cd "$GITHUB_WORKSPACE"
+          old="$(node -p 'require("./.claude-plugin/plugin.json").version')"
+          new="${old%.*}.$(( ${old##*.} + 1 ))"
+          src="$RUNNER_TEMP/upgrade-src"
+          rm -rf "$src" && mkdir -p "$src"
+          cp -R .claude-plugin skill "$src/"
+          claude plugin marketplace add "$src"
+          claude plugin install revoice@revoice-skill
+          cache="$HOME/.claude/plugins/cache/revoice-skill/revoice"
+          test -d "$cache/$old" || { echo "::error::no $cache/$old after install"; exit 1; }
+
+          mkdir -p "$HOME/.config/revoice/voices"
+          printf '%s\n' '# Test voice' 'Short sentences. No filler.' > "$HOME/.config/revoice/voices/me.md"
+          printf '%s\n' 'default_voice: me' > "$HOME/.config/revoice/config.yaml"
+          sums_before="$(cd "$HOME/.config/revoice" && sha256sum voices/me.md config.yaml)"
+
+          sed -i "s/\"version\": \"$old\"/\"version\": \"$new\"/" "$src/.claude-plugin/plugin.json"
+          grep -q "\"version\": \"$new\"" "$src/.claude-plugin/plugin.json" || { echo "::error::version bump in the copy failed"; exit 1; }
+          claude plugin marketplace update
+          out="$(claude plugin update revoice@revoice-skill 2>&1)"
+          echo "$out"
+          grep -qF "from $old to $new" <<< "$out" || { echo "::error::update did not report $old to $new"; exit 1; }
+          test -d "$cache/$new" || { echo "::error::no $cache/$new in the plugin cache"; exit 1; }
+
+          sums_after="$(cd "$HOME/.config/revoice" && sha256sum voices/me.md config.yaml)"
+          [ "$sums_before" = "$sums_after" ] || { echo "::error::voice files changed by the update"; exit 1; }
+          stray="$(find "$HOME/.claude/plugins" -type f \( -name me.md -o -name config.yaml \))"
+          [ -z "$stray" ] || { echo "::error::voice file inside the plugin folder:"; echo "$stray"; exit 1; }
