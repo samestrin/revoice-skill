@@ -120,6 +120,7 @@ jobs:
 
           sed -i "s/\"version\": \"$old\"/\"version\": \"$new\"/" "$src/.claude-plugin/plugin.json"
           grep -q "\"version\": \"$new\"" "$src/.claude-plugin/plugin.json" || { echo "::error::version bump in the copy failed"; exit 1; }
+          cp "$HOME/.config/revoice/config.yaml" "$cache/$old/config.yaml"
           claude plugin marketplace update
           out="$(claude plugin update revoice@revoice-skill 2>&1)"
           echo "$out"
