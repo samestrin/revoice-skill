@@ -23,6 +23,7 @@ import argparse
 import codecs
 import collections
 import csv
+import datetime
 import hashlib
 import sys
 import html
@@ -128,6 +129,11 @@ def _slug(s: str, n: int = 50) -> str:
     return s[:n].rstrip("-") or "untitled"
 
 
+def _key(text: str) -> str:
+    """sha1 of the lowercased words; the last part of a sample's file name."""
+    return hashlib.sha1(" ".join(text.lower().split()).encode()).hexdigest()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("mbox", type=Path)
@@ -185,8 +191,17 @@ def main() -> None:
         kept.append((date, subject, text))
 
     # Drafts and resends: within one subject, keep the longest version and drop
-    # any other version that shares most of its word 5-grams.
-    kept.sort(key=lambda c: len(c[2].split()), reverse=True)
+    # any other version that shares most of its word 5-grams. Ties in length
+    # go by date (undated last), then the text's sha1, then the subject, so the
+    # output does not depend on the order of messages in the mbox.
+    def order(c):
+        date, subject, text = c
+        if date is not None and date.tzinfo is None:
+            date = date.replace(tzinfo=datetime.timezone.utc)
+        return (-len(text.split()), date is None, date.timestamp() if date else 0.0,
+                _key(text), subject)
+
+    kept.sort(key=order)
     by_title: dict[str, list[set]] = collections.defaultdict(list)
     args.out.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -202,7 +217,7 @@ def main() -> None:
         if args.max_samples and stats["kept"] >= args.max_samples:
             stats["over the cap"] += 1
             continue
-        key = hashlib.sha1(" ".join(toks).encode()).hexdigest()
+        key = _key(text)
         title = RE_PREFIX.sub("", subject).strip()
         if not title:
             title = " ".join(text.split()[:8]).rstrip(".,;:") + "..."

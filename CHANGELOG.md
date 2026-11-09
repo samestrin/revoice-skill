@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Install test` workflow: on every pull request and push to main it installs Claude Code in a clean `node:24` container, validates the plugin, then installs the skill both ways the README gives (plugin marketplace, copy-folder) into fresh homes and checks the installed copy. A further step writes `~/.config/revoice/voices/me.md` and `config.yaml`, upgrades the plugin from a temp copy raised to the next patch version, and fails unless the update reports the new version, the new version folder is in the plugin cache, both voice files are unchanged and no voice file is in the plugin folder.
 - `Release` workflow: pushing a `v0.2.0`-form tag checks that the version without its `v` equals `plugin.json` `version`, `SKILL.md` `metadata.version` and the newest released `CHANGELOG.md` heading, runs the unit tests, then creates the GitHub release with that version's CHANGELOG section as its notes. A tag that disagrees fails before any release is made. Only the release job can write to the repo. `.github/scripts/release-notes.py` prints the section; `test_release_notes.py` covers it.
 
+### Fixed
+
+- `extract-samples.py` gives the same samples and the same `index.csv` whatever the order of messages in the mbox. Samples of equal length used to keep mbox order, so a shuffled mailbox could keep the other copy of a resent message, or a different sample at the `--max-samples` cap. Ties now go by date (earliest first, undated last), then the sample's sha1, then the subject.
+
 ## [0.2.0] - 2026-11-03
 
 ### Added
