@@ -130,5 +130,58 @@ class ExtractRunTest(unittest.TestCase):
             self.assertEqual(len(list(csv.DictReader(f))), 148)
 
 
+class MessageOrderTest(unittest.TestCase):
+    """The same mailbox in another message order gives the same output folder."""
+
+    BODY = " ".join(f"word{i}" for i in range(20))
+    MESSAGES = [
+        # Equal length, different subjects: the cap and index.csv must not
+        # fall back to mbox order.
+        ("Fence", "Tue, 01 Mar 2022 09:00:00 +0000", f"Fence {BODY}"),
+        ("Compost", "Tue, 01 Mar 2022 09:00:00 +0000", f"Compost {BODY}"),
+        # One forward sent twice minutes apart: duplicates of equal length.
+        ("Gas report", "Wed, 02 Mar 2022 06:18:00 +0000", f"Forwarded by Alex 06:18 {BODY}"),
+        ("Gas report", "Wed, 02 Mar 2022 06:30:00 +0000", f"Forwarded by Alex 06:30 {BODY}"),
+        # No date at all, and a date with no time zone ("-0000").
+        ("Bike ride", None, f"Ride {BODY}"),
+        ("Seed swap", "Tue, 01 Mar 2022 09:00:00 -0000", f"Seeds {BODY}"),
+    ]
+
+    def run_order(self, messages, *extra):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        mbox = Path(tmp.name) / "in.mbox"
+        with open(mbox, "w", encoding="utf-8") as f:
+            for subject, date, body in messages:
+                f.write("From alex@example.com Tue Mar  1 09:00:00 2022\n"
+                        "From: Alex Rivera <alex@example.com>\n"
+                        f"Subject: {subject}\n"
+                        + (f"Date: {date}\n" if date else "")
+                        + f"\n{body}\n\n")
+        out = Path(tmp.name) / "out"
+        subprocess.run(
+            [sys.executable, str(SCRIPT), str(mbox), "--from", "alex@example.com",
+             "--min-words", "1", "--sig-min-count", "1000", "-o", str(out), *extra],
+            capture_output=True, text=True, check=True)
+        return {p.name: p.read_bytes() for p in sorted(out.iterdir())}
+
+    def assert_order_independent(self, *extra):
+        forward = self.run_order(self.MESSAGES, *extra)
+        backward = self.run_order(self.MESSAGES[::-1], *extra)
+        self.assertEqual(list(forward), list(backward))
+        self.assertEqual(forward, backward)
+        return forward
+
+    def test_no_cap(self):
+        files = self.assert_order_independent("--max-samples", "0")
+        # Fence, Compost, one Gas report, Bike ride, Seed swap, index.csv.
+        self.assertEqual(len(files), 6)
+
+    def test_cap_on_equal_lengths(self):
+        # One Gas report (longest), then one of four samples of 21 words.
+        files = self.assert_order_independent("--max-samples", "2")
+        self.assertEqual(len(files), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
