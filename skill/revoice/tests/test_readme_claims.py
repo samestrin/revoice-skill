@@ -61,7 +61,7 @@ class TestReadmeLocalReview(unittest.TestCase):
     def test_you_approve_the_samples_before_the_upload(self):
         start = self.text.index("## 3. Build your voice profile")
         build = self.text[start:self.text.index("**What leaves your machine.**", start)]
-        self.assertIn("you review and approve the samples before the upload", build)
+        self.assertIn("You review and approve the samples before the upload", build)
         self.assertIn("You review and approve the samples before the upload", self.paragraph)
 
 
