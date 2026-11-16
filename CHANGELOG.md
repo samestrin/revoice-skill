@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-16
+
 ### Changed
 
 - `--build` stops after the local review (phase 4) and before the first upload (phase 5): Claude tells you how many samples are KEEP, that they are plain files in `WORK/samples/`, and that changing a row's `verdict` to DROP in `samples/index.csv` keeps that sample from being sent, then waits for your explicit go. Claude still does not read the samples at this step. If you drop so many that fewer than 15 are left, it warns as the review does. New tests show a sample dropped by hand is never sent and is not counted in the cost estimate.
