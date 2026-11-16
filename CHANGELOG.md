@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-16
+
 ### Added
 
 - `Install test` workflow: on every pull request and push to main it installs Claude Code in a clean `node:24` container, validates the plugin, then installs the skill both ways the README gives (plugin marketplace, copy-folder) into fresh homes and checks the installed copy. A further step writes `~/.config/revoice/voices/me.md` and `config.yaml`, upgrades the plugin from a temp copy raised to the next patch version, and fails unless the update reports the new version, the new version folder is in the plugin cache, both voice files are unchanged and no voice file is in the plugin folder.
