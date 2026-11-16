@@ -6,7 +6,7 @@ Paths below: `SKILL` is this skill's folder (the Skill dir in `SKILL.md`'s Paths
 
 Rules for the whole build:
 
-- **The email is private.** The review in phase 4 runs on this machine and sends nothing anywhere. The only step that sends samples off the machine is `build-profile.py` in phase 5, which sends the kept samples to the text analysis API. Do not send samples anywhere else. In chat, quote at most a short line when asked.
+- **The email is private.** The review in phase 4 runs on this machine and sends nothing anywhere. The only step that sends samples off the machine is `build-profile.py` in phase 5, which sends the kept samples to the text analysis API, and only after the user has approved them at the end of phase 4. Do not send samples anywhere else. In chat, quote at most a short line when asked.
 - **Never read, print, or ask for the API key.** It lives in a key file (default `~/.config/revoice/api-key`). Only check that the file exists and is not empty (`test -s`). If the user pastes a key into the chat anyway, do not repeat it, and tell them it is now in the transcript and they may want a new key.
 - **Python:** use `python` if `python --version` reports Python 3.10 or newer, else `python3`. On Windows, `python3` is often a Microsoft Store shortcut; do not use it there.
 - **Long runs:** the helpers read big files one message at a time. If the mbox is over 500 MB, run the filter and extract steps in the background and wait for them to finish.
@@ -67,6 +67,16 @@ Run from `WORK`:
 ```
 
 It runs on this machine with no network and no API key. It marks each sample KEEP or DROP and adds `verdict,score,reason` columns to `samples/index.csv`. `--author` lets it drop a sample signed with a clearly different name. Do not read the samples yourself. Report the KEEP vs DROP counts it prints, and the top 3 drop reasons from the CSV's `reason` column. If fewer than 15 are KEEP, tell the user the profile will be weaker and ask whether to continue.
+
+### Stop: the user approves the samples
+
+No sample has left the machine yet; phase 5 is the first upload. Before it, tell the user:
+
+- How many samples are KEEP: those are what phase 5 sends to the API.
+- They are plain files in `WORK/samples/`, one email each, and they can open any of them.
+- To keep a sample from being sent, they change that row's `verdict` to DROP in `samples/index.csv`. Only KEEP rows are sent.
+
+Then wait for an explicit go. Do not start phase 5 on silence or on an answer that is not a clear yes. Do not read the samples yourself at this step: the user reviews them, not you. When they say go, count the KEEP rows in `samples/index.csv` again; if they dropped so many that fewer than 15 are KEEP, tell them the profile will be weaker and ask whether to continue, as above.
 
 ## Phase 5: Build the profile JSON
 
