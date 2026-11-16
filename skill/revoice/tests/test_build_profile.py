@@ -402,6 +402,21 @@ class BuildProfileTest(unittest.TestCase):
         self.assertIn("estimated cost: 7 credits", self.stdout)
         self.assertNotIn("short by", self.stdout)
 
+    def test_row_the_user_sets_to_drop_is_not_counted_or_sent(self):
+        # build.md stops before phase 5 so the user can set a KEEP row to DROP.
+        self.reviewed_samples()
+        index = self.samples / "index.csv"
+        index.write_text(index.read_text(encoding="utf-8").replace(
+            "c.md,5, keep ,7", "c.md,5,DROP,7"), encoding="utf-8")
+        self.build("--estimate", key=(), author=())
+        self.assertIn("estimated cost: 5 credits (2 samples, 0 reference texts)", self.stdout)
+        api = self.build()
+        self.assertIn("this build costs 5 credits", self.stdout)
+        self.assertEqual(api.credits, 1000 - 5)
+        for r in api.metered():
+            for text in r["body"]["texts"]:
+                self.assertNotIn("Text C best.", text)
+
     def test_estimate_before_extraction_has_no_samples_yet(self):
         self.build("--estimate", key=(), author=())
         self.assertIn("no samples", self.stdout)

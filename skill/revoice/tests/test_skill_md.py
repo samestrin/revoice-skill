@@ -69,6 +69,18 @@ class BuildReviewTest(unittest.TestCase):
         self.assertNotRegex(phase, r"(?i)posts the samples|HTTP 40|timeout")
         self.assertRegex(phase, r"KEEP vs DROP")
 
+    def test_phase_4_stops_for_the_user_to_approve_the_samples(self):
+        phase = build_phase(4)
+        stop = phase[phase.index("### Stop: the user approves the samples"):]
+        self.assertIn("`WORK/samples/`", stop)
+        self.assertIn("`verdict`", stop)
+        self.assertIn("DROP", stop)
+        self.assertIn("`samples/index.csv`", stop)
+        self.assertRegex(stop, r"explicit go")
+        self.assertRegex(stop, r"Do not read the samples yourself")
+        self.assertRegex(stop, r"fewer than 15")
+        self.assertRegex(BUILD, r"(?s)### Stop: the user approves.*## Phase 5:")
+
     def test_phase_6_sets_aside_foreign_samples(self):
         phase = build_phase(6)
         self.assertRegex(phase, r"set aside any kept sample that clearly is not the author's own voice or language")

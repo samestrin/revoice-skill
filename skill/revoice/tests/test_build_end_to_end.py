@@ -175,6 +175,56 @@ class BuildEndToEndTest(unittest.TestCase):
         self.assertEqual([r["path"] for r in requests if r["path"] not in METERED],
                          ["/health"])
 
+    def test_sample_the_user_drops_by_hand_is_never_sent(self):
+        # build.md stops after phase 4 so the user can open the samples and set a
+        # row's verdict to DROP in samples/index.csv before anything is sent.
+        mbox = self.work / "export.mbox"
+        mbox.write_bytes((FIXTURES / "sent.mbox").read_bytes())
+        self.run_helper("mbox-filter-before.py", "export.mbox", "--before", "2022-09-01",
+                        "-o", "pre-ai.mbox")
+        self.run_helper("extract-samples.py", "pre-ai.mbox", "--from", AUTHOR,
+                        "--min-words", "1", "-o", "samples")
+        self.run_helper("review-samples.py", "--author", "Alex Rivera")
+        columns, rows = self.read_index("samples")
+        kept = [r["file"] for r in rows if r["verdict"] == "KEEP"]
+        self.assertGreaterEqual(len(kept), 2)
+
+        # The user's edit: one KEEP row changed to DROP, nothing else touched.
+        dropped = kept[0]
+        for row in rows:
+            if row["file"] == dropped:
+                row["verdict"] = "DROP"
+        with open(self.work / "samples" / "index.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=columns)
+            writer.writeheader()
+            writer.writerows(rows)
+        left = kept[1:]
+        cost = bp.build_cost(len(left), 0)
+
+        # The free estimate counts only the rows still KEEP.
+        out = self.run_helper("build-profile.py", "--estimate", "--samples", "samples")
+        self.assertIn(f"estimated cost: {cost} credits ({len(left)} samples,", out)
+
+        out = self.run_helper("build-profile.py", "--samples", "samples",
+                              "--author", "Alex Rivera", "--from", AUTHOR,
+                              "--api", self.api, "--api-key-file", str(self.key_file),
+                              "-o", "voice-profile.json")
+        self.assertIn(f"this build costs {cost} credits", out)
+
+        dropped_text = bp.body(self.work / "samples" / dropped)
+        self.assertTrue(dropped_text)
+        sent = []
+        for r in self.server.requests:
+            if r["body"]:
+                sent += r["body"]["texts"] + r["body"].get("options", {}).get("reference_texts", [])
+        self.assertTrue(sent)
+        for text in sent:
+            self.assertNotIn(dropped_text, text)
+        self.assertEqual(BALANCE - self.server.credits, cost)
+        profile = json.loads((self.work / "voice-profile.json").read_text(encoding="utf-8"))
+        self.assertNotIn(dropped, profile["meta"]["samples"]["voice_profile"])
+        self.assertEqual(profile["meta"]["samples"]["fingerprint_and_baseline"], len(left))
+
 
 if __name__ == "__main__":
     unittest.main()
