@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `review-samples.py --mode writing|brand` drops quoted AI model output (reason `quoted model output`: a short lead-in such as "AI21 Studio Response" or "Here is what ChatGPT said:" followed by the answer, or mostly code-like lines) and one-cell-per-line table text (reason `table or numbers`). In a real run, model answers quoted in a PDF and a DOCX were kept as the author's own writing and uploaded. Email mode is unchanged.
 - `review-samples.py`: the `coverage:` line says "1 document", not "1 documents".
 - `.claude-plugin/plugin.json`: the description says `--build` builds a voice from an email export, a folder of your own writing, or a folder of brand documents, not from an email export only. `test_plugin_manifest.py` pins the three sources.
+- `extract-documents.py`: one article saved several ways (a URL, a PDF and a DOCX copy) is one document. Sources that lost a passage to a copy in another source, or share half their text with it, are written under one `source` name in `index.csv`, so the document count downstream is the true one, and the report says `read 5 documents (3 distinct)`. Dedupe also drops a passage with half its word 5-grams among the other kept passages, not just within one of them, so a passage that straddles two others is no longer kept twice.
 
 ## [0.3.0] - 2026-11-20
 

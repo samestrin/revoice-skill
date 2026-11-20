@@ -14,7 +14,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from _load import BUILD, load, run_main
+from _load import BUILD, load, real_run, real_run_body, run_main
 
 SCRIPT = BUILD / "extract-documents.py"
 ed = load(SCRIPT, "extract_documents")
@@ -857,6 +857,127 @@ class DedupeAndCapTest(PassageBase):
         self.assertEqual(run.text(run.rows[0]["source"]).split("\n\n", 1)[1],
                          (self.docs / run.rows[0]["source"]).read_text().split("---\n")[-1])
         self.assertRegex(run.stdout, r"duplicate\s*: 1")
+
+
+class OneDocumentTest(PassageBase):
+    """Bugs 3 and 4 of the real run: one article saved three ways is one
+    document, and a passage that straddles two kept passages is a duplicate."""
+
+    def write_real_run(self) -> list[Path]:
+        """The 3 copies of one article plus two other articles, as the real run read them."""
+        return [
+            self.write("article.md", real_run("copy_article_html.md")),
+            self.write("article-pdf.txt", real_run("copy_article_pdf.txt")),
+            self.write("article-docx.md", real_run("copy_article_docx.md")),
+            self.write("faster.md", real_run_body("prose_72faster_a.md") + "\n\n"
+                       + real_run_body("prose_72faster_b.md") + "\n"),
+            self.write("llmenv.md", real_run_body("prose_llmenv_a.md") + "\n\n"
+                       + real_run_body("prose_llmenv_b.md") + "\n"),
+        ]
+
+    def test_three_copies_of_one_article_give_rows_with_one_source(self):
+        self.write_real_run()
+        run = self.run_script(self.docs)
+        copies = {"article.md", "article-pdf.txt", "article-docx.md"}
+        article = [r for r in run.rows if r["subject"] in
+                   {"article", "article-pdf", "article-docx"}]
+        self.assertGreater(len(article), 1)
+        self.assertEqual(len({r["source"] for r in article}), 1)
+        self.assertIn(article[0]["source"], copies)
+
+    def test_two_different_articles_are_not_merged(self):
+        self.write_real_run()
+        run = self.run_script(self.docs)
+        sources = collections.Counter(r["source"] for r in run.rows)
+        self.assertEqual(len(sources), 3)
+        self.assertIn("faster.md", sources)
+        self.assertIn("llmenv.md", sources)
+
+    def test_the_report_says_how_many_documents_are_distinct(self):
+        self.write_real_run()
+        run = self.run_script(self.docs)
+        self.assertIn("read 5 documents (3 distinct), wrote", run.stdout)
+
+    def test_the_straddling_passage_from_the_real_run_is_a_duplicate(self):
+        self.write_real_run()
+        run = self.run_script(self.docs)
+        # html#1 (the ranked results) is half in the pdf copy, half in the docx copy.
+        self.assertNotIn("article", {r["subject"] for r in run.rows})
+        self.assertRegex(run.stdout, r"duplicate\s*: 3")
+
+    def test_a_passage_built_from_halves_of_two_kept_passages_is_dropped(self):
+        a, b = prose(400, "half-a").split(), prose(400, "half-b").split()
+        self.write("a.md", " ".join(a))
+        self.write("b.md", " ".join(b))
+        # 180 + 180 words: each pairwise share is 176/356, under DUPLICATE_SHARE.
+        self.write("c.md", " ".join(a[-180:] + b[:180]))
+        self.write("d.md", prose(300, "different"))
+        # A third of it repeats a kept passage: still its own passage.
+        self.write("e.md", " ".join(a[:100]) + " " + prose(200, "own"))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(run.by_source), ["a.md", "b.md", "d.md", "e.md"])
+        self.assertRegex(run.stdout, r"duplicate\s*: 1")
+
+    def test_a_passage_half_among_the_passages_kept_before_it_is_dropped_there(self):
+        # c.md is 146/376 in a.md and 96/376 in b.md, 0.64 in both: dropped when
+        # it is read. Kept until the last pass, it would cover 0.74 of a.md and
+        # drop a.md instead.
+        x, y, a = (prose(n, t).split() for n, t in ((150, "sx"), (150, "sy"), (100, "sa")))
+        b, c = prose(240, "sb").split(), prose(130, "sc").split()
+        self.write("a.md", " ".join(x + y + a))
+        self.write("b.md", " ".join(x + b))
+        self.write("c.md", " ".join(y + b[:100] + c))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(run.by_source), ["a.md", "b.md"])
+        self.assertRegex(run.stdout, r"duplicate\s*: 1")
+        self.assertIn("read 3 documents, wrote", run.stdout)
+
+    def test_a_document_repeating_itself_is_not_merged_with_one_sharing_a_phrase(self):
+        passage = prose(345, "self").replace("self-0 ", "the quick brown fox jumps ")
+        self.write("x.md", f"{passage}\n\n{passage}\n")
+        self.write("y.md", "the quick brown fox jumps " + prose(400, "y"))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(r["source"] for r in run.rows), ["x.md", "y.md"])
+        self.assertRegex(run.stdout, r"duplicate\s*: 1")
+        self.assertIn("read 2 documents, wrote", run.stdout)
+
+    def test_output_is_identical_when_the_real_run_inputs_are_given_in_reverse_order(self):
+        paths = self.write_real_run()
+
+        def snapshot(name, args):
+            self.out = self.tmp / name
+            run = self.run_script(*args)
+            return run.stdout.replace(str(self.out), "OUT"), {
+                p.name: p.read_bytes() for p in sorted(self.out.iterdir())}
+
+        self.assertEqual(snapshot("forward", paths), snapshot("backward", paths[::-1]))
+
+
+class GroupTest(unittest.TestCase):
+    """group(): which sources are one document, and its canonical name."""
+
+    @staticmethod
+    def cand(source, text, words=None):
+        return {"title": source, "date": None, "source": source, "n": 1, "text": text,
+                "words": words or len(text.split()), "key": ed._key(text)}
+
+    def test_a_source_that_shares_half_its_text_with_another_is_the_same_document(self):
+        long, short = prose(400, "g"), prose(400, "g").split()
+        cands = [self.cand("long.md", long),
+                 self.cand("short.md", " ".join(short[:200] + prose(150, "s").split()))]
+        self.assertEqual(ed.group(cands, []), {"long.md": "long.md", "short.md": "long.md"})
+
+    def test_a_source_sharing_under_half_is_its_own_document(self):
+        words = prose(400, "g").split()
+        cands = [self.cand("long.md", " ".join(words)),
+                 self.cand("other.md", " ".join(words[:100] + prose(300, "o").split()))]
+        self.assertEqual(ed.group(cands, []), {"long.md": "long.md", "other.md": "other.md"})
+
+    def test_a_lost_passage_joins_the_sources_and_the_first_in_order_names_them(self):
+        cands = [self.cand("b.md", prose(200, "x")), self.cand("a.md", prose(300, "y")),
+                 self.cand("c.md", prose(100, "z"))]
+        self.assertEqual(ed.group(cands, [("c.md", "b.md"), ("b.md", "a.md")]),
+                         {"a.md": "a.md", "b.md": "a.md", "c.md": "a.md"})
 
 
 class BeforeTest(PassageBase):

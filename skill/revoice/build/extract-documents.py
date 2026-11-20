@@ -33,7 +33,12 @@ Anything else is skipped and counted. Then:
     before it when that stays within 500 words, or is dropped as too short. A
     document under --min-words words is kept whole from 60 words
   - a passage that shares half its word 5-grams with a longer one, in any
-    document, is a duplicate
+    document, or has half of them among all the longer passages kept (one
+    that straddles two others), is a duplicate
+  - sources that are one document (a passage of one was a duplicate of the
+    other's, or half of one's 5-grams are in the other) are named by one
+    source in index.csv: the one with the longest passage. The report then
+    says how many of the documents read are distinct
   - at most --max-samples (default 148) are kept, round-robin across
     documents: each document's longest passage first, then the second, ...
 
@@ -602,25 +607,84 @@ def _order(c: dict):
     return (-c["words"], c["key"], c["source"], c["title"], c["date"] or "", c["n"])
 
 
-def dedupe(items: list[dict]) -> tuple[list[dict], int]:
+def _held(grams: set, index: dict, kept: list[dict], c: dict) -> str | None:
+    """The other source whose kept passages hold most of these 5-grams, if
+    that is DUPLICATE_SHARE of them: one shared phrase is not one document."""
+    held = collections.Counter(s for g in grams
+                               for s in {kept[k]["source"] for k in index.get(g, ())})
+    held.pop(c["source"], None)
+    best = min(held, key=lambda s: (-held[s], s), default=None)
+    return best if best and held[best] >= DUPLICATE_SHARE * len(grams) else None
+
+
+def dedupe(items: list[dict]) -> tuple[list[dict], int, list[tuple[str, str]]]:
     """Drop each passage that shares DUPLICATE_SHARE of its 5-grams with one
-    before it in _order."""
+    before it in _order, or has DUPLICATE_SHARE of them among the passages
+    kept before it. Then, in _order, drop each kept passage with
+    DUPLICATE_SHARE of its 5-grams among all the other kept passages (one that
+    straddles two shorter ones). Also returns the pairs (source, other source)
+    for each dropped passage with DUPLICATE_SHARE of its 5-grams in the kept
+    passages of one other source."""
     items = sorted(items, key=_order)
     index: dict[tuple, list[int]] = collections.defaultdict(list)
     kept_grams: list[set] = []
-    kept, dropped = [], 0
+    kept, links = [], []
     for c in items:
         grams = _grams(c["text"])
         hits = collections.Counter(k for g in grams for k in index.get(g, ()))
-        if any(h / max(1, min(len(grams), len(kept_grams[k]))) >= DUPLICATE_SHARE
-               for k, h in hits.items()):
-            dropped += 1
+        if (any(h / max(1, min(len(grams), len(kept_grams[k]))) >= DUPLICATE_SHARE
+                for k, h in hits.items())
+                or sum(g in index for g in grams) / max(1, len(grams)) >= DUPLICATE_SHARE):
+            links.append((c["source"], _held(grams, index, kept, c)))
             continue
         for g in grams:
             index[g].append(len(kept_grams))
         kept_grams.append(grams)
         kept.append(c)
-    return kept, dropped
+
+    copies = collections.Counter(g for grams in kept_grams for g in grams)
+    for k, (c, grams) in enumerate(zip(kept, kept_grams)):
+        if sum(copies[g] > 1 for g in grams) / max(1, len(grams)) >= DUPLICATE_SHARE:
+            copies.subtract(grams)
+            for g in grams:
+                index[g].remove(k)
+            links.append((c["source"], _held(grams, index, kept, c)))
+            kept_grams[k] = None
+    out = [c for c, grams in zip(kept, kept_grams) if grams is not None]
+    return out, len(items) - len(out), [(a, b) for a, b in links if b]
+
+
+def group(items: list[dict], links: list[tuple[str, str]]) -> dict[str, str]:
+    """Which sources are one document: {source: the source that names it}.
+
+    Two sources are one document when they are linked (a passage of one was a
+    duplicate of the other's) or DUPLICATE_SHARE of one's 5-grams are in the
+    other. A document is named by the source of its first passage in _order."""
+    grams: dict[str, set] = collections.defaultdict(set)
+    for c in items:
+        grams[c["source"]] |= _grams(c["text"])
+    holders: dict[tuple, set] = collections.defaultdict(set)
+    for source, gs in grams.items():
+        for g in gs:
+            holders[g].add(source)
+    pairs = list(links)
+    for source, gs in grams.items():
+        shared = collections.Counter(o for g in gs for o in holders[g] if o != source)
+        pairs += [(source, o) for o, n in shared.items() if n >= DUPLICATE_SHARE * len(gs)]
+
+    parent = {s: s for s in grams}
+
+    def root(s):
+        while parent[s] != s:
+            s = parent[s]
+        return s
+
+    for a, b in pairs:
+        parent[root(a)] = root(b)
+    name: dict[str, str] = {}
+    for c in sorted(items, key=_order):
+        name.setdefault(root(c["source"]), c["source"])
+    return {s: name[root(s)] for s in grams}
 
 
 def cap(items: list[dict], max_samples: int) -> list[dict]:
@@ -716,7 +780,9 @@ def main() -> None:
             candidates.append({"title": title, "date": date, "source": source, "n": i,
                                "text": text, "words": n, "key": _key(text)})
 
-    kept, stats["duplicate"] = dedupe(candidates)
+    kept, stats["duplicate"], links = dedupe(candidates)
+    document = group(candidates, links)
+    distinct = n_read - sum(s != d for s, d in document.items())
     picked = cap(kept, args.max_samples)
     stats["over the cap"] = len(kept) - len(picked)
 
@@ -730,7 +796,7 @@ def main() -> None:
         names.add(name)
         (args.out / name).write_text(f"# {c['title']}\n\n{c['text']}\n", encoding="utf-8")
         rows.append({"file": name, "date": c["date"] or "undated", "words": c["words"],
-                     "subject": c["title"], "source": c["source"]})
+                     "subject": c["title"], "source": document[c["source"]]})
 
     rows.sort(key=lambda r: (-r["words"], r["file"]))
     with open(args.out / "index.csv", "w", newline="", encoding="utf-8") as f:
@@ -740,7 +806,8 @@ def main() -> None:
 
     for source, reason in skipped:
         print(f"skip {source}: {reason}")
-    print(f"read {_plural(n_read, 'document')}, wrote {_plural(len(rows), 'sample')} to {args.out}/")
+    also = f" ({distinct:,} distinct)" if distinct != n_read else ""
+    print(f"read {_plural(n_read, 'document')}{also}, wrote {_plural(len(rows), 'sample')} to {args.out}/")
     if skipped:
         print(f"skipped {_plural(len(skipped), 'document')}:")
         for reason, n in collections.Counter(r for _, r in skipped).most_common():
