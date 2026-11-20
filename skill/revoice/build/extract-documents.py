@@ -136,19 +136,25 @@ class _HTMLText(html.parser.HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in self.SKIP:
             self.skip += 1
+        elif self.skip:
+            return
         elif tag == "title":
             self.in_title = True
-        elif tag in self.BLOCK and not self.skip:
+        elif tag in ("br", "hr") and self.level:
+            self.buf.append(" ")  # a line break inside a heading
+        elif tag in self.BLOCK:
             self.flush()
-            if re.fullmatch(r"h[1-6]", tag):
-                self.level = int(tag[1])
+            # Any other block start also ends a heading left unclosed.
+            self.level = int(tag[1]) if re.fullmatch(r"h[1-6]", tag) else 0
 
     def handle_endtag(self, tag):
         if tag in self.SKIP:
             self.skip = max(0, self.skip - 1)
+        elif self.skip:
+            return
         elif tag == "title":
             self.in_title = False
-        elif tag in self.BLOCK and not self.skip:
+        elif tag in self.BLOCK and not (tag in ("br", "hr") and self.level):
             self.flush()
             if re.fullmatch(r"h[1-6]", tag):
                 self.level = 0
