@@ -15,6 +15,15 @@ author's usual language; or signed with a clearly different name than --author.
 score is 1-5 from prose length and paragraph structure. reason is one fixed
 label (see REASONS), never a quote from the email.
 
+--mode says where the samples came from (default email). For passages from
+documents (extract-documents.py), writing and brand turn the email rules off:
+quoted, forwarded and header lines, unsubscribe boilerplate, and sign-off names.
+writing drops a passage whose first or
+last line is a byline ("By <Name>") naming someone other than --author; brand
+keeps every author. Both print a coverage: line (KEEP passages, and the distinct
+source values among them) and exit with status 3 below the floor in FLOORS, after
+index.csv is written so the verdicts can be read.
+
 index.csv is replaced only after every sample was judged, so a failed run
 leaves it as it was. A rerun reviews every sample again.
 """
@@ -33,7 +42,14 @@ COLUMNS = ["verdict", "score", "reason"]
 KEEP_REASON = "own writing"
 REASONS = [KEEP_REASON, "broken extraction", "quoted or forwarded text",
            "list, table, code or log", "form letter", "not in the author's language",
-           "written in another name"]
+           "written in another name", "written by someone else"]
+
+MODES = ["email", "writing", "brand"]
+# Per document mode: (KEEP passages, distinct documents). Below the floor the build
+# stops (exit 3); below the minimum it warns that the profile will be weaker.
+FLOORS = {"writing": (10, 0), "brand": (10, 3)}
+MINIMUMS = {"writing": (20, 5), "brand": (20, 5)}
+FLOOR_EXIT = 3
 
 # A rule fires when at least this share of the non-blank lines match.
 MOSTLY = 0.5
@@ -91,6 +107,11 @@ CLOSINGS = re.compile(
     r"yours|yours sincerely|yours truly|many thanks|all the best|take care|talk soon)\s*[,!.]?$",
     re.I)
 NAME_LINE = re.compile(r"^[^\W\d_][\w.'-]*(\s+[^\W\d_][\w.'-]*){0,2}$")
+# "By Jane Doe", "Written by Jane Doe", "*Posted by Jane Doe on March 3*".
+BYLINE = re.compile(r"^[*_\s]*(?:written |posted )?by\s+(.+?)(?:\s+on\s.*)?[*_\s]*$", re.I)
+DATE_WORDS = frozenset(
+    "monday tuesday wednesday thursday friday saturday sunday january february march april "
+    "may june july august september october november december today tomorrow tonight".split())
 
 QUOTE = re.compile(r"^\s*>")
 FORWARD_START = re.compile(
@@ -259,7 +280,24 @@ def signoff_name(text: str) -> str:
 
 def other_name(text: str, author: str) -> bool:
     """True when the sign-off name clearly is not the author's."""
-    name, mine = signoff_name(text), author.lower().replace(".", " ").split()
+    return not_author(signoff_name(text), author)
+
+
+def byline_name(text: str) -> str:
+    """The name in a byline on the first or last line ("" if none)."""
+    lines = [l.strip() for l in lines_of(text)]
+    for line in lines[:1] + lines[-1:]:
+        m = BYLINE.match(line)
+        name = m.group(1).strip(" *_") if m else ""
+        if (NAME_LINE.match(name) and len(name) <= 40
+                and not any(t.lower() in DATE_WORDS for t in name.replace(".", " ").split())):
+            return name
+    return ""
+
+
+def not_author(name: str, author: str) -> bool:
+    """True when name clearly is a name, and not the author's."""
+    mine = author.lower().replace(".", " ").split()
     if not name or not mine:
         return False
     # A name is capitalised and has no ordinary word in it ("Will follow up" is not one).
@@ -284,15 +322,18 @@ def score(text: str) -> int:
     return max(1, min(5, s))
 
 
-def review(texts: list[str], author: str = "") -> list[dict]:
+def review(texts: list[str], author: str = "", mode: str = "email") -> list[dict]:
     """Return one {verdict, score, reason} dict per text, in order."""
+    if mode not in MODES:
+        raise ValueError(f"unknown mode {mode!r}")
+    email = mode == "email"
     dups = find_duplicates(texts)
     language = author_language(texts)
     out = []
     for i, t in enumerate(texts):
         if is_broken(t):
             reason = "broken extraction"
-        elif is_quoted(t):
+        elif email and is_quoted(t):
             reason = "quoted or forwarded text"
         elif is_structured(t):
             reason = "list, table, code or log"
@@ -303,8 +344,10 @@ def review(texts: list[str], author: str = "") -> list[dict]:
         elif (language and len(words(t)) >= MIN_LANGUAGE_WORDS
               and language_share(t, language) < LANGUAGE_SHARE):
             reason = "not in the author's language"
-        elif other_name(t, author):
+        elif email and other_name(t, author):
             reason = "written in another name"
+        elif mode == "writing" and not_author(byline_name(t), author):
+            reason = "written by someone else"
         else:
             reason = KEEP_REASON
         out.append({"verdict": "KEEP" if reason == KEEP_REASON else "DROP",
@@ -316,7 +359,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--samples", type=Path, default=Path("samples"))
     ap.add_argument("--author", default="",
-                    help="the author's name; a sign-off with a clearly different name is dropped")
+                    help="the author's name; a sign-off with a clearly different name is dropped "
+                         "(email), or a byline with one (writing); unused in brand")
+    ap.add_argument("--mode", choices=MODES, default="email",
+                    help="where the samples came from: an email export (default), the "
+                         "author's own documents, or a brand's documents")
     args = ap.parse_args()
 
     index = args.samples / "index.csv"
@@ -327,7 +374,7 @@ def main() -> None:
     if not rows:
         sys.exit(f"error: no samples in {index}")
 
-    verdicts = review([body(args.samples / r["file"]) for r in rows], args.author)
+    verdicts = review([body(args.samples / r["file"]) for r in rows], args.author, args.mode)
 
     fields += [c for c in COLUMNS if c not in fields]
     fd, tmp = tempfile.mkstemp(dir=args.samples, prefix="index.", suffix=".tmp")
@@ -345,6 +392,28 @@ def main() -> None:
     drops = Counter(v["reason"] for v in verdicts if v["verdict"] == "DROP")
     for reason, n in drops.most_common():
         print(f"  dropped {n}: {reason}")
+    if args.mode in FLOORS:
+        check_coverage(args.mode, keep, documents(rows, verdicts))
+
+
+def documents(rows: list[dict], verdicts: list[dict]) -> int:
+    """Distinct non-empty source values among the KEEP rows (0 without the column)."""
+    return len({r.get("source") for r, v in zip(rows, verdicts)
+                if v["verdict"] == "KEEP" and r.get("source")})
+
+
+def check_coverage(mode: str, keep: int, docs: int) -> None:
+    """Print the coverage: line; exit FLOOR_EXIT below the mode's floor."""
+    print(f"coverage: {keep} KEEP passages from {docs} documents")
+    (floor, floor_docs), (least, least_docs) = FLOORS[mode], MINIMUMS[mode]
+    if keep < floor or docs < floor_docs:
+        need = f"{floor} KEEP passages" + (f" from {floor_docs} documents" if floor_docs else "")
+        print(f"below the floor for {mode}: a profile needs at least {need}; "
+              f"add more documents and run the extract again", file=sys.stderr)
+        sys.exit(FLOOR_EXIT)
+    if keep < least or docs < least_docs:
+        print(f"below the minimum for {mode}: {least} KEEP passages from {least_docs} documents "
+              f"give a stronger profile; this one will be weaker")
 
 
 if __name__ == "__main__":
