@@ -115,6 +115,142 @@ class BuildReviewTest(unittest.TestCase):
         self.assertNotIn("200 samples", BUILD)
 
 
+def subsection(phase: str, title: str) -> str:
+    """The `### <title>` subsection of a phase, up to the next heading."""
+    match = re.search(rf"^### {re.escape(title)}\n.*?(?=^##|\Z)", phase, re.M | re.S)
+    if not match:
+        raise AssertionError(f"phase has no '### {title}' subsection")
+    return match.group(0)
+
+
+def without_email(phase: str) -> str:
+    """A phase as a writing or brand build reads it: every `### Email` part removed."""
+    return re.sub(r"^### Email\n.*?(?=^##|\Z)", "", phase, flags=re.M | re.S)
+
+
+# The word mbox, but not the helper's file name, which phase 0 checks for in every mode.
+MBOX = re.compile(r"(?i)\bmbox\b(?!-filter-before\.py)")
+
+
+class BuildSourcesTest(unittest.TestCase):
+    """--build takes an email export, a folder of the user's writing or a folder
+    of brand documents (Epic 17 T5)."""
+
+    def test_phase_1_first_question_is_the_source(self):
+        phase = build_phase(1)
+        first = re.search(r"(?m)^1\. .*$", phase).group(0)
+        self.assertIn("**Source:**", first)
+        for source in ("an email export", "a folder of your own writing", "a folder of brand documents"):
+            self.assertIn(source, first)
+        for mode in ("`email`", "`writing`", "`brand`"):
+            self.assertIn(mode, first)
+        self.assertLess(phase.index(first), phase.index("### Email"))
+
+    def test_phase_1_asks_documents_only_what_they_need(self):
+        docs = subsection(build_phase(1), "Writing and brand")
+        self.assertIn("`--urls`", docs)
+        self.assertRegex(docs, r"brand's name")
+        self.assertIn("slug", docs)
+        self.assertRegex(docs, r"Cutoff date:\*\* optional")
+        self.assertIn("This is my own writing, not AI-assisted.", docs)
+        self.assertIn("I may send these to a third-party API and to Claude.", docs)
+        self.assertNotIn("Addresses", docs)
+        self.assertNotIn("Reference set", docs)
+
+    def test_brand_path_confirms_the_user_may_send_the_documents(self):
+        docs = subsection(build_phase(1), "Writing and brand")
+        self.assertRegex(docs, r"brand documents are often confidential")
+        self.assertRegex(docs, r"confirm they may send these documents")
+        self.assertRegex(docs, r"clear yes")
+        self.assertRegex(BUILD.split("## Phase 0:")[0], r"Brand documents are often confidential")
+
+    def test_privacy_rules_cover_documents(self):
+        rules = BUILD.split("## Phase 0:")[0]
+        self.assertIn("**The email is private.**", rules)
+        self.assertRegex(rules, r"never leaves the machine as a whole")
+        self.assertRegex(rules, r"up to 148\) go to the text analysis API over HTTPS")
+        self.assertRegex(rules, r"never fetch a URL yourself")
+
+    def test_phase_2_branches_by_source(self):
+        phase = build_phase(2)
+        email = subsection(phase, "Email")
+        docs = subsection(phase, "Writing and brand")
+        self.assertIn("mbox-filter-before.py", email)
+        self.assertIn("extract-samples.py", email)
+        self.assertIn("extract-documents.py", docs)
+        self.assertNotIn("extract-samples.py", docs)
+        self.assertIn("--before <cutoff>", docs)
+        self.assertRegex(docs, r"`--before` unless the user gave a cutoff date")
+        self.assertIn("pdftotext", docs)
+
+    def test_phase_4_names_the_document_modes_and_stops_at_the_floor(self):
+        phase = build_phase(4)
+        self.assertIn('review-samples.py --author "<Name>" --mode <mode>', phase)
+        docs = subsection(phase, "Writing and brand")
+        self.assertIn("`--mode writing`", docs)
+        self.assertIn("`--mode brand`", docs)
+        self.assertIn("`coverage:`", docs)
+        self.assertRegex(docs, r"status 3")
+        self.assertRegex(docs, r"Stop the build here: nothing has been uploaded")
+        self.assertRegex(docs, r"10 KEEP passages from at least 3 documents")
+        self.assertIn("fewer than 15", subsection(phase, "Email"))
+
+    def test_phase_5_passes_the_source_type(self):
+        phase = build_phase(5)
+        self.assertIn("--source-type email", subsection(phase, "Email"))
+        docs = subsection(phase, "Writing and brand")
+        self.assertIn("--source-type <mode>", docs)
+        self.assertNotRegex(docs.split("```")[1], r"--from|--reference")
+
+    def test_phase_6_shapes_follow_the_source(self):
+        phase = build_phase(6)
+        self.assertIn("samples beat stats", phase)
+        self.assertIn("the usual shape of an email", subsection(phase, "Email"))
+        writing = subsection(phase, "Writing")
+        self.assertIn("the usual shape of an article or post", writing)
+        self.assertIn("once per piece at most", writing)
+        brand = subsection(phase, "Brand")
+        self.assertIn("the usual shape of a brand document", brand)
+        self.assertIn("`# <Brand>: Writing Profile`", brand)
+        self.assertRegex(brand, r"at least 3 different documents \(the `source` column")
+        self.assertRegex(brand, r'"we" and "you"')
+        self.assertRegex(brand, r"client names, prices and internal project names")
+        for docs in (writing, brand):
+            self.assertIn("in today's fast-paced world", docs)
+            self.assertNotIn("I hope this email finds you well", docs)
+
+    def test_phase_8_has_a_demo_per_source(self):
+        phase = build_phase(8)
+        for title in ("Email", "Writing", "Brand"):
+            self.assertRegex(subsection(phase, title), r"(?m)^> ")
+
+    def test_no_document_phase_mentions_mbox_or_email_limits(self):
+        for n in range(9):
+            with self.subTest(phase=n):
+                text = without_email(build_phase(n))
+                self.assertNotRegex(text, MBOX)
+                self.assertNotIn("once per email", text)
+                self.assertNotRegex(text, r"(?i)sent from")
+
+    def test_the_checks_see_an_email_subsection(self):
+        # The test above would pass on its own if every phase were one big Email part.
+        self.assertRegex(without_email(build_phase(2)), "extract-documents.py")
+        self.assertRegex(build_phase(2), MBOX)
+        self.assertNotRegex(without_email(build_phase(2)), MBOX)
+
+
+DESCRIPTION_LIMIT = 1024  # characters Claude allows in a skill's description
+
+
+class DescriptionTest(unittest.TestCase):
+    def test_build_sentence_names_the_three_sources(self):
+        description = re.search(r"(?m)^description: (.*)$", frontmatter()).group(1)
+        self.assertIn(
+            "--build walks the user through building a voice profile from an email export (mbox), "
+            "a folder of their own writing, or a folder of brand documents.", description)
+        self.assertLessEqual(len(description), DESCRIPTION_LIMIT)
+
+
 def skill_step(n: int) -> str:
     match = re.search(rf"^## Step {n}:.*?(?=^## |\Z)", TEXT, re.M | re.S)
     if not match:

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `--build` asks first where your writing is: an email export, a folder of your own writing, or a folder of brand documents, then asks only what that source needs. For documents: the folder or a `--urls` list, your name or the brand's name, an optional cutoff date, and two confirmations (the writing is your own or the brand's and not AI-assisted, and you may send it to the text analysis API and to Claude; for brand documents, after a plain warning that they are often confidential). The email path asks the same questions as before. Documents go through `extract-documents.py`, `review-samples.py --mode writing|brand` (the build stops before any upload below the floor) and `build-profile.py --source-type`; the voice file describes the shape of an article or of a brand document instead of an email. The `SKILL.md` description names the three sources.
+
 ## [0.2.2] - 2026-11-16
 
 ### Changed
