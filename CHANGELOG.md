@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `review-samples.py`: the `coverage:` line says "1 document", not "1 documents".
 - `.claude-plugin/plugin.json`: the description says `--build` builds a voice from an email export, a folder of your own writing, or a folder of brand documents, not from an email export only. `test_plugin_manifest.py` pins the three sources.
 - `extract-documents.py`: one article saved several ways (a URL, a PDF and a DOCX copy) is one document. Sources that lost a passage to a copy in another source, or share half their text with it, are written under one `source` name in `index.csv`, so the document count downstream is the true one, and the report says `read 5 documents (3 distinct)`. Dedupe also drops a passage with half its word 5-grams among the other kept passages, not just within one of them, so a passage that straddles two others is no longer kept twice.
+- `extract-documents.py`: the HTML reader drops icon-font words and terminal-style widgets. An element with a `material-symbols`, `material-icons`, `fa-`, `bi-` or `icon-` class, or with `aria-hidden="true"`, is not read, and a block of 3 or more lines, most of them starting with a `$ ` or `> ` prompt, is dropped whole. In a real run a brand page's samples began "hub Where My Work…" and "lock Private by Default…" and kept a status widget's `> Linux | macOS | Windows` lines as prose.
 
 ## [0.3.0] - 2026-11-20
 

@@ -260,6 +260,12 @@ class IconAndWidgetTest(Base):
             '<p>One<img class="icon-x" aria-hidden="true">two<br class="fa-x"></p><p>Three</p>', "stem")
         self.assertEqual(paragraphs, ["Onetwo", "Three"])
 
+    def test_a_self_closing_icon_element_drops_only_itself(self):
+        _, _, paragraphs = ed.read_html(
+            '<p>One <span class="icon-x"/>two <span>three</span></p><h2>Head <i class="fa-a"></i></h2>',
+            "stem")
+        self.assertEqual(paragraphs, ["One two three", "## Head"])
+
     def test_a_terminal_widget_is_dropped_whole(self):
         _, _, paragraphs = ed.read_html(
             "<div><p>Intro.</p><div class=term><div>build :: status</div><div>$ make test</div>"
