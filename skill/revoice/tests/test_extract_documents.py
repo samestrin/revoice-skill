@@ -1100,5 +1100,148 @@ class BeforeTest(PassageBase):
         self.assertIn("YYYY-MM-DD", err.getvalue())
 
 
+class TitleSuffixTest(Base):
+    """Bug 8 of the real run: every dev.to title ended " - DEV Community"."""
+
+    def urls(self, pages: dict) -> Path:
+        self.opener.side_effect = lambda req, timeout: FakeResponse(pages[req.full_url], req.full_url)
+        path = self.tmp / "urls.txt"
+        path.write_text("\n".join(pages) + "\n", encoding="utf-8")
+        return path
+
+    @staticmethod
+    def page(title: str, tag: str) -> bytes:
+        return f"<title>{title}</title><p>{prose(20, tag)}</p>".encode()
+
+    def test_a_site_name_shared_by_three_page_titles_is_dropped(self):
+        titles = [real_run(f"prose_{n}_a.md").partition("\n")[0][2:]
+                  for n in ("72faster", "comparing13", "llmenv")]
+        self.assertTrue(all(t.endswith(" - DEV Community") for t in titles))
+        pages = {f"https://dev.to/sam/{i}": self.page(t, f"t{i}") for i, t in enumerate(titles)}
+        run = self.run_script("--urls", self.urls(pages))
+        got = sorted(r["subject"] for r in run.rows)
+        self.assertEqual(got, sorted(t[:-len(" - DEV Community")] for t in titles))
+        self.assertIn("Stop Juggling API Keys: Meet llm-env — One Command, Any LLM Provider", got)
+        for url in pages:
+            self.assertNotIn("DEV Community", run.text(url))
+
+    def test_a_site_name_on_a_single_page_is_kept(self):
+        pages = {"https://dev.to/sam/one": self.page("My Post - DEV Community", "one"),
+                 "https://example.com/two": self.page("Other Post - Example Blog", "two")}
+        run = self.run_script("--urls", self.urls(pages))
+        self.assertEqual(sorted(r["subject"] for r in run.rows),
+                         ["My Post - DEV Community", "Other Post - Example Blog"])
+
+    def test_a_file_title_is_not_a_site_name(self):
+        self.write("a.md", f"---\ntitle: Notes - Draft\n---\n{prose(20, 'a')}\n")
+        self.write("b.md", f"---\ntitle: Plans - Draft\n---\n{prose(20, 'b')}\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(r["subject"] for r in run.rows), ["Notes - Draft", "Plans - Draft"])
+
+
+class HeadingMarkTest(PassageBase):
+    """Bug 8: heading lines were written into the sample text as "# ..." lines."""
+
+    def body_lines(self, run: Run) -> list[str]:
+        """Every sample line after the "# <title>" header."""
+        return [l for s in self.samples(run) for l in s.split("\n")[1:]]
+
+    def test_no_sample_line_starts_with_a_hash_for_html_input(self):
+        self.write("page.html", f"<title>Page</title><h1>Main part</h1><p>{prose(200, 'h1')}</p>"
+                                f"<h2>Second part</h2><p>{prose(200, 'h2')}</p>")
+        run = self.run_script(self.docs)
+        lines = self.body_lines(run)
+        self.assertEqual([l for l in lines if l.startswith("#")], [])
+        self.assertIn("Main part", lines)
+
+    def test_no_sample_line_starts_with_a_hash_for_docx_input(self):
+        self.write("guide.docx", docx_bytes([prose(200, "d1")], headings=["Our voice"]))
+        run = self.run_script(self.docs)
+        lines = self.body_lines(run)
+        self.assertEqual([l for l in lines if l.startswith("#")], [])
+        self.assertIn("Our voice", lines)
+
+    def test_a_heading_is_still_not_counted_as_prose(self):
+        self.write("guide.docx", docx_bytes([prose(200, "d1")], headings=["Our voice"]))
+        run = self.run_script(self.docs)
+        self.assertEqual(run.rows[0]["words"], "200")
+
+
+class PageNumberLabelTest(PassageBase):
+    """Bug 8: a numbered section label "01" was removed as a page number."""
+
+    def test_a_section_label_before_a_heading_is_kept_as_text(self):
+        self.write("doc.md", f"{prose(200, 'p1')}\n\n01\n\n## Getting started\n\n{prose(200, 'p2')}\n")
+        run = self.run_script(self.docs)
+        self.assertIn("\n01\n", self.all_text(run))
+        self.assertNotIn("page number", run.stdout)
+
+    def test_a_section_label_before_a_short_title_cased_line_is_kept(self):
+        self.write("doc.txt", f"{prose(200, 'p1')}\n\n02\nWhy Latency Matters\n\n{prose(200, 'p2')}\n")
+        run = self.run_script(self.docs)
+        self.assertIn("02\nWhy Latency Matters", self.all_text(run))
+        self.assertNotIn("page number", run.stdout)
+
+    def test_a_bare_number_before_prose_is_still_a_page_number(self):
+        self.write("doc.txt", f"{prose(200, 'p1')}\n\n7\n\n{prose(200, 'p2')}\n")
+        run = self.run_script(self.docs)
+        self.assertNotIn("\n7\n", self.all_text(run))
+        self.assertRegex(run.stdout, r"page number\s*: 1")
+
+    @unittest.skipIf(os.name == "nt", "the pdftotext stub is a shell script")
+    def test_a_lone_number_on_a_page_break_is_still_removed(self):
+        # The page's number, then the next page opening with a title-cased heading.
+        self.write("report.pdf", f"{prose(200, 'p1')}\n\n7\n\fWhy Latency Matters\n\n{prose(200, 'p2')}\n"
+                                 f"\f8\n\nResults And Notes\n\n{prose(100, 'p3')}\n")
+        path = self.pdftotext_stub('for a; do prev="$last"; last="$a"; done\nexec cat "$prev"\n')
+        with mock.patch.dict(os.environ, {"PATH": path}):
+            run = self.run_script(self.docs)
+        text = self.all_text(run)
+        self.assertNotIn("\n7\n", text)
+        self.assertNotIn("\n8\n", text)
+        self.assertIn("Why Latency Matters", text)
+        self.assertRegex(run.stdout, r"page number\s*: 2")
+
+
+@unittest.skipIf(os.name == "nt", "the pdftotext stub is a shell script")
+class HyphenJoinTest(PassageBase):
+    """Bug 8: pdftotext keeps a word broken by a hyphen at a line end."""
+
+    def pdf_text(self, text: str) -> str:
+        self.write("report.pdf", text)
+        path = self.pdftotext_stub('for a; do prev="$last"; last="$a"; done\nexec cat "$prev"\n')
+        with mock.patch.dict(os.environ, {"PATH": path}):
+            run = self.run_script(self.docs)
+        return self.all_text(run)
+
+    def test_a_broken_word_found_whole_elsewhere_is_joined(self):
+        text = self.pdf_text(f"{prose(100, 'a')} We need real-\ntime answers here.\n\n"
+                             f"{prose(100, 'b')} A realtime system is fast.\n")
+        self.assertIn("We need realtime\nanswers here.", text)
+        self.assertNotIn("real-", text)
+
+    def test_a_broken_word_alone_on_its_line_joins_without_a_paragraph_break(self):
+        text = self.pdf_text(f"{prose(100, 'a')} We need real-\ntime\nanswers here.\n\n"
+                             f"{prose(100, 'b')} A Realtime system is fast.\n")
+        self.assertIn("We need realtime\nanswers here.", text)
+
+    def test_with_no_whole_word_elsewhere_the_line_is_left_alone(self):
+        out = self.pdf_text(f"{prose(100, 'a')} Offering near real-\ntime responses.\n\n{prose(100, 'b')}\n")
+        self.assertIn("near real-\ntime responses.", out)
+
+    def test_a_join_is_not_reported(self):
+        self.write("report.pdf", f"{prose(100, 'a')} real-\ntime\n\n{prose(100, 'b')} realtime.\n")
+        path = self.pdftotext_stub('for a; do prev="$last"; last="$a"; done\nexec cat "$prev"\n')
+        with mock.patch.dict(os.environ, {"PATH": path}):
+            run = self.run_script(self.docs)
+        self.assertNotIn("hyphen", run.stdout)
+        self.assertNotIn("join", run.stdout)
+
+    def test_text_files_are_not_joined(self):
+        self.write("note.txt", f"{prose(100, 'a')} We need real-\ntime answers.\n\n{prose(100, 'b')} realtime.\n")
+        run = self.run_script(self.docs)
+        self.assertIn("real-\ntime", self.all_text(run))
+
+
 if __name__ == "__main__":
     unittest.main()
