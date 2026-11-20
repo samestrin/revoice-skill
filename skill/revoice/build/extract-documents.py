@@ -8,7 +8,11 @@ and the pages listed in --urls:
   .md, .txt     UTF-8 text; a leading "---" front matter block gives
                 "title:" and "date:" and is then dropped
   .html, .htm   headings, paragraphs and list items; navigation, headers,
-                footers, scripts, code, tables, quotes and forms are dropped
+                footers, scripts, code, tables, quotes and forms are dropped,
+                and so are icon-font elements (material-symbols, material-icons,
+                fa-, bi-, icon- classes), anything aria-hidden="true", and a
+                terminal-style widget (a block of 3 or more lines, most of
+                them starting with a "$ " or "> " prompt)
   .docx         the paragraphs of the main document; tables, headers and
                 footers are dropped
   .pdf          through the pdftotext program (poppler) when it is on PATH
@@ -167,11 +171,32 @@ def read_text(text: str, stem: str):
     return title, date, _paragraphs(text)
 
 
+# An icon font draws a ligature word ("arrow_forward", "lock") as a picture.
+ICON_CLASS = re.compile(r"material-symbols|material-icons|^(?:fa|bi|icon)-")
+PROMPT_LINE = re.compile(r"[$>](?:\s|$)")  # "$ make test", "> deployed"
+WIDGET_MIN_LINES = 3
+
+
+def _hidden(attrs) -> bool:
+    """An icon-font element or one hidden from screen readers: never prose."""
+    for name, value in attrs:
+        if name == "aria-hidden" and (value or "").strip().lower() == "true":
+            return True
+        if name == "class" and any(ICON_CLASS.search(c) for c in (value or "").split()):
+            return True
+    return False
+
+
 class _HTMLText(html.parser.HTMLParser):
     SKIP = {"script", "style", "nav", "header", "footer", "aside", "form", "pre",
             "code", "table", "figure", "blockquote", "template", "noscript", "svg"}
     BLOCK = {"p", "li", "div", "section", "article", "main", "br", "ul", "ol",
              "dd", "dt", "body", "hr", "h1", "h2", "h3", "h4", "h5", "h6"}
+    # Elements with no end tag: they hold no text and never open a drop.
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+            "meta", "source", "track", "wbr"}
+    # Checked on their end tag for a terminal-style widget.
+    CONTAINER = {"div", "section", "article", "main", "body", "ul", "ol"}
 
     def __init__(self):
         super().__init__()
@@ -181,6 +206,9 @@ class _HTMLText(html.parser.HTMLParser):
         self.level = 0
         self.buf: list[str] = []
         self.paragraphs: list[str] = []
+        # Open elements outside skipped ones: (tag, paragraphs written before it).
+        self.open: list[tuple[str, int]] = []
+        self.drop_at = 0  # while dropping, the depth of the dropped element in self.open
 
     def flush(self):
         text = " ".join("".join(self.buf).split())
@@ -191,9 +219,16 @@ class _HTMLText(html.parser.HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in self.SKIP:
             self.skip += 1
-        elif self.skip:
             return
-        elif tag == "title":
+        if self.skip:
+            return
+        if tag not in self.VOID:
+            self.open.append((tag, len(self.paragraphs)))
+            if not self.drop_at and _hidden(attrs):
+                self.drop_at = len(self.open)
+        if self.drop_at:
+            return
+        if tag == "title":
             self.in_title = True
         elif tag in ("br", "hr") and self.level:
             self.buf.append(" ")  # a line break inside a heading
@@ -201,23 +236,49 @@ class _HTMLText(html.parser.HTMLParser):
             self.flush()
             # Any other block start also ends a heading left unclosed.
             self.level = int(tag[1]) if re.fullmatch(r"h[1-6]", tag) else 0
+            if tag in self.CONTAINER:
+                self.open[-1] = (tag, len(self.paragraphs))
 
     def handle_endtag(self, tag):
         if tag in self.SKIP:
             self.skip = max(0, self.skip - 1)
-        elif self.skip:
             return
-        elif tag == "title":
+        if self.skip:
+            return
+        start = None
+        if tag not in self.VOID:
+            # Close the innermost open `tag` and any element left unclosed inside it.
+            for i in range(len(self.open) - 1, -1, -1):
+                if self.open[i][0] == tag:
+                    start = self.open[i][1]
+                    del self.open[i:]
+                    break
+            if self.drop_at:
+                # The dropped element, or the parent of one left unclosed, ended.
+                if len(self.open) < self.drop_at:
+                    self.drop_at = 0
+                return
+        if tag == "title":
             self.in_title = False
         elif tag in self.BLOCK and not (tag in ("br", "hr") and self.level):
             self.flush()
             if re.fullmatch(r"h[1-6]", tag):
                 self.level = 0
+            if tag in self.CONTAINER and start is not None:
+                self.drop_widget(start)
+
+    def drop_widget(self, start: int):
+        """A container whose lines mostly start with a "$" or ">" prompt is a
+        terminal-style widget, not prose: drop all of its lines."""
+        lines = self.paragraphs[start:]
+        prompts = sum(1 for l in lines if PROMPT_LINE.match(l))
+        if len(lines) >= WIDGET_MIN_LINES and prompts * 2 > len(lines):
+            del self.paragraphs[start:]
 
     def handle_data(self, data):
         if self.in_title:
             self.title += data
-        elif not self.skip:
+        elif not self.skip and not self.drop_at:
             self.buf.append(data)
 
 

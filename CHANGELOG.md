@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `build-profile.py --source-type writing|brand` takes the voice profile's passages in turn from each document (best score, then longest, within each), so three documents give 5 each of the default 15. In a real run, 14 of the 15 came from one article because the longest passages won. Email builds, and an index with no `source` column, choose exactly as before.
 - `build-profile.py` prints one line when it builds without a reference set (always for documents, the default for email): the baseline is then the author's own mean, so the voice file's Stats reference has nothing to compare. The profile JSON is unchanged.
 - `build-profile.py`: `--help` no longer calls `--reference` "(recommended)"; it says the default is none and documents have no reference set. The help says samples come from `extract-samples.py` or `extract-documents.py`, and `meta.source` says "1 document", not "1 documents".
+- `extract-documents.py`: the HTML reader drops icon-font words and terminal-style widgets. An element with a `material-symbols`, `material-icons`, `fa-`, `bi-` or `icon-` class, or with `aria-hidden="true"`, is not read, and a block of 3 or more lines, most of them starting with a `$ ` or `> ` prompt, is dropped whole. In a real run a brand page's samples began "hub Where My Work…" and "lock Private by Default…" and kept a status widget's `> Linux | macOS | Windows` lines as prose.
 
 ## [0.3.0] - 2026-11-20
 

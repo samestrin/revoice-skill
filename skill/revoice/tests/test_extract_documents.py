@@ -205,6 +205,97 @@ class HtmlReaderTest(Base):
         self.assertEqual(run.by_source["old.htm"]["subject"], "old")
 
 
+class IconAndWidgetTest(Base):
+    """Bug 5: icon-font ligatures and a terminal widget read as prose (Epic 19 T3)."""
+    ICONS = ("arrow_forward", "smart_toy", "verified_user", "public", "lock", "hub")
+
+    def test_real_run_brand_page_keeps_no_icon_word_and_no_widget(self):
+        self.write("brand.html", real_run("brand_icons_widgets.html"))
+        run = self.run_script(self.docs)
+        text = run.text("brand.html")
+        paragraphs = text.split("\n\n")
+        for icon in self.ICONS:
+            # "public" is also genuine prose here ("two public companies"), so an
+            # icon word is checked as the token an icon span leaves: one on its
+            # own at the start or end of a paragraph.
+            for p in paragraphs:
+                self.assertFalse(p.startswith(icon + " ") or p.rstrip().endswith(" " + icon),
+                                 (icon, p))
+        for icon in ("arrow_forward", "smart_toy", "verified_user", "hub"):
+            self.assertNotIn(icon, text)
+        for widget in ("estrin-lab", "ONLINE", "PRIVATE LAB", "KVM", "UPS", "auto-shutdown", "> "):
+            self.assertNotIn(widget, text)
+        self.assertIn("founder of two public companies.", text)
+        self.assertIn("\n\nWhere My Work Is Built, Tested and Previewed\n\n", text)
+        self.assertIn("\n\nI choose the language by the constraint, not by habit.", text)
+        self.assertIn("\n\nPrivate by Default. Your name", text)
+
+    def test_real_run_brand_page_paragraphs(self):
+        _, _, paragraphs = ed.read_html(real_run("brand_icons_widgets.html"), "stem")
+        self.assertEqual([p.split()[0] for p in paragraphs],
+                         ["Senior", "Book", "Where", "I", "Coding", "Direct", "Private", "Remote"])
+        self.assertEqual(paragraphs[1], "Book a 30-Minute Call")
+
+    def test_icon_font_classes_and_aria_hidden_are_dropped(self):
+        _, _, paragraphs = ed.read_html(
+            '<p><i class="fa fa-check"></i>One <span class="bi-star">star</span>two '
+            '<span class="icon-home">home</span>three <span class="material-icons">face</span>four '
+            '<span class="x material-symbols-rounded">bolt</span>five <b aria-hidden="TRUE">deco</b>six</p>'
+            '<p>Kept <span class="iconic">iconic</span> and <span aria-hidden="false">shown</span>.</p>',
+            "stem")
+        self.assertEqual(paragraphs, ["One two three four five six", "Kept iconic and shown."])
+
+    def test_a_dropped_element_nested_in_its_own_tag_ends_at_its_own_end_tag(self):
+        _, _, paragraphs = ed.read_html(
+            '<p>Before <span aria-hidden="true">a <span>b</span> c</span> after</p><p>Next</p>', "stem")
+        self.assertEqual(paragraphs, ["Before after", "Next"])
+
+    def test_an_unclosed_dropped_element_ends_with_its_parent(self):
+        _, _, paragraphs = ed.read_html(
+            '<ul><li class="icon-check">gone<li>also gone</ul><p>The rest of the page.</p>', "stem")
+        self.assertEqual(paragraphs, ["The rest of the page."])
+
+    def test_void_elements_with_icon_classes_drop_nothing(self):
+        _, _, paragraphs = ed.read_html(
+            '<p>One<img class="icon-x" aria-hidden="true">two<br class="fa-x"></p><p>Three</p>', "stem")
+        self.assertEqual(paragraphs, ["Onetwo", "Three"])
+
+    def test_a_self_closing_icon_element_drops_only_itself(self):
+        _, _, paragraphs = ed.read_html(
+            '<p>One <span class="icon-x"/>two <span>three</span></p><h2>Head <i class="fa-a"></i></h2>',
+            "stem")
+        self.assertEqual(paragraphs, ["One two three", "## Head"])
+
+    def test_a_terminal_widget_is_dropped_whole(self):
+        _, _, paragraphs = ed.read_html(
+            "<div><p>Intro.</p><div class=term><div>build :: status</div><div>$ make test</div>"
+            "<div>$ make build</div><div>ok</div><div>&gt; deployed</div></div><p>After.</p></div>",
+            "stem")
+        self.assertEqual(paragraphs, ["Intro.", "After."])
+
+    def test_prose_just_before_a_nested_widget_is_kept(self):
+        # "lead" is only written when the widget's <div> starts; the widget's
+        # lines begin after it, so it must survive the widget being dropped.
+        _, _, paragraphs = ed.read_html(
+            "<div><p>p1</p><p>p2</p><p>p3</p>lead<div class=w><p>$ a</p><p>$ b</p>"
+            "<p>$ c</p><p>$ d</p></div><p>after</p></div>", "stem")
+        self.assertEqual(paragraphs, ["p1", "p2", "p3", "lead", "after"])
+
+    def test_a_container_with_few_or_no_prompt_lines_is_kept(self):
+        page = ("<div><p>$5 million raised.</p><p>$10 for a ticket.</p><p>&gt;50% grew.</p></div>"
+                "<div><p>$ one prompt</p><p>prose line</p><p>more prose</p><p>&gt; quote</p></div>"
+                "<div><p>$ ls</p><p>&gt; out</p></div>")
+        _, _, paragraphs = ed.read_html(page, "stem")
+        self.assertEqual(paragraphs, ["$5 million raised.", "$10 for a ticket.", ">50% grew.",
+                                      "$ one prompt", "prose line", "more prose", "> quote",
+                                      "$ ls", "> out"])
+
+    def test_a_plain_pre_block_is_still_skipped(self):
+        _, _, paragraphs = ed.read_html(
+            "<p>Run this:</p><pre>$ npm install\n$ npm test\nPRE-TEXT</pre><p>Then this.</p>", "stem")
+        self.assertEqual(paragraphs, ["Run this:", "Then this."])
+
+
 class DocxReaderTest(Base):
     def test_reads_paragraphs_and_headings_skips_tables_and_footers(self):
         self.write("Brand Guide.docx", docx_bytes(["We write plainly.", "We keep it short."],
