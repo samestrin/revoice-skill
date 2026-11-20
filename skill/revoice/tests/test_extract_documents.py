@@ -21,13 +21,16 @@ ed = load(SCRIPT, "extract_documents")
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
-def docx_bytes(paragraphs, *, table=None, headings=()) -> bytes:
-    """A minimal .docx: one paragraph per string, an optional table after them."""
+def docx_bytes(paragraphs, *, table=None, headings=(), raw=()) -> bytes:
+    """A minimal .docx: one paragraph per string, an optional table after them.
+
+    Each string in ``raw`` is the inner XML of one more paragraph."""
     def para(text, style=None):
         ppr = f'<w:pPr><w:pStyle w:val="{style}"/></w:pPr>' if style else ""
         return f"<w:p>{ppr}<w:r><w:t xml:space=\"preserve\">{text}</w:t></w:r></w:p>"
     body = "".join(para(h, "Heading1") for h in headings)
     body += "".join(para(p) for p in paragraphs)
+    body += "".join(f"<w:p>{r}</w:p>" for r in raw)
     if table:
         body += f"<w:tbl><w:tr><w:tc>{para(table)}</w:tc></w:tr></w:tbl>"
     xml = f'<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{W}"><w:body>{body}</w:body></w:document>'
@@ -124,6 +127,10 @@ class TextReaderTest(Base):
         title, date, _ = ed.read_text("---\ndate: '2021-07-09T10:00:00Z'\n---\nBody.\n", "x")
         self.assertEqual((title, date), ("x", "2021-07-09"))
 
+    def test_front_matter_date_that_is_not_a_real_day_is_undated(self):
+        _, date, _ = ed.read_text("---\ndate: 2021-02-30\n---\nBody.\n", "x")
+        self.assertIsNone(date)
+
     def test_front_matter_date_that_is_not_a_date_is_undated(self):
         _, date, _ = ed.read_text("---\ndate: last spring\n---\nBody.\n", "x")
         self.assertIsNone(date)
@@ -168,6 +175,20 @@ class HtmlReaderTest(Base):
                          "# Spring & Seeds\n\n# Spring planting\n\nSeeds go in when the soil is warm.\n\n"
                          "Peas first\n\nBeans later\n\nWater daily.\n")
 
+    def test_an_unclosed_heading_ends_at_the_next_block(self):
+        title, _, paragraphs = ed.read_html(
+            "<title>T</title><h1>Main heading<p>para one<p>para two", "stem")
+        self.assertEqual(paragraphs, ["# Main heading", "para one", "para two"])
+
+    def test_a_line_break_inside_a_heading_stays_in_the_heading(self):
+        _, _, paragraphs = ed.read_html("<h2>Head<br>still<hr></h2><p>Body.</p>", "stem")
+        self.assertEqual(paragraphs, ["## Head still", "Body."])
+
+    def test_a_title_inside_a_skipped_element_is_ignored(self):
+        title, _, paragraphs = ed.read_html(
+            "<noscript><title>NOS</title></noscript><title>Real</title><p>body</p>", "stem")
+        self.assertEqual((title, paragraphs), ("Real", ["body"]))
+
     def test_htm_is_read_too(self):
         self.write("old.htm", "<p>Old page text.</p>")
         run = self.run_script(self.docs)
@@ -191,6 +212,14 @@ class DocxReaderTest(Base):
             run = self.run_script(self.docs)
         self.assertEqual(sorted(run.by_source), ["small.docx"])
         self.assertRegex(run.stdout, r"docx too large\s*: 1")
+
+    def test_tabs_breaks_and_empty_paragraphs(self):
+        self.write("tabs.docx", docx_bytes(
+            ["First."],
+            raw=['<w:r><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:t>c</w:t><w:cr/><w:t>d</w:t></w:r>',
+                 '<w:r><w:t xml:space="preserve">   </w:t></w:r>', ""]))
+        run = self.run_script(self.docs)
+        self.assertEqual(run.text("tabs.docx"), "# tabs\n\nFirst.\n\na b\nc\nd\n")
 
     def test_broken_docx_is_counted_as_unreadable(self):
         self.write("broken.docx", b"not a zip at all")
@@ -244,6 +273,14 @@ class PdfReaderTest(Base):
 
     def test_default_pdftotext_timeout_is_30_seconds(self):
         self.assertEqual(ed.PDFTOTEXT_TIMEOUT, 30)
+
+    def test_pdftotext_that_cannot_start_is_counted_as_failed(self):
+        self.write("bad.pdf", "whatever")
+        path = self.pdftotext_stub("exit 0\n")
+        with mock.patch.dict(os.environ, {"PATH": path}), \
+                mock.patch.object(ed.subprocess, "run", side_effect=OSError(8, "Exec format error")):
+            run = self.run_script(self.docs)
+        self.assertRegex(run.stdout, r"pdftotext failed\s*: 1")
 
     def test_pdftotext_failure_is_counted(self):
         self.write("bad.pdf", "whatever")
@@ -336,6 +373,21 @@ class WalkTest(Base):
         self.assertRegex(run.stdout, r"unreadable\s*: 1")
         self.assertIn("skip locked: unreadable", run.stdout)
 
+    def test_file_that_fails_to_read_is_counted_as_unreadable(self):
+        self.write("gone.md", "Listed, then unreadable.")
+        self.write("ok.md", "Fine.")
+        real = Path.read_bytes
+
+        def read_bytes(path):
+            if path.name == "gone.md":
+                raise PermissionError(13, "denied")
+            return real(path)
+
+        with mock.patch.object(Path, "read_bytes", read_bytes):
+            run = self.run_script(self.docs)
+        self.assertEqual(list(run.by_source), ["ok.md"])
+        self.assertIn("skip gone.md: unreadable", run.stdout)
+
     def test_missing_path_is_counted(self):
         run = self.run_script(self.docs / "nope")
         self.assertEqual(run.rows, [])
@@ -390,6 +442,14 @@ class UrlTest(Base):
 
     def test_default_page_limit_is_5_mb(self):
         self.assertEqual(ed.MAX_PAGE_BYTES, 5 * 1024 * 1024)
+
+    def test_unknown_charset_falls_back_to_utf8(self):
+        page = "<title>Caf\u00e9</title><p>Cr\u00e8me br\u00fbl\u00e9e.</p>".encode("utf-8")
+        self.opener.side_effect = lambda req, timeout: FakeResponse(
+            page, req.full_url, "text/html; charset=x-bogus")
+        run = self.run_script("--urls", self.urls("https://example.com/menu"))
+        self.assertEqual(run.text("https://example.com/menu"),
+                         "# Caf\u00e9\n\nCr\u00e8me br\u00fbl\u00e9e.\n")
 
     def test_fetch_errors_are_counted_as_fetch_failed(self):
         self.opener.side_effect = urllib.error.URLError("no route")
