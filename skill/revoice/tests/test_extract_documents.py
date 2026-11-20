@@ -3,6 +3,7 @@ import csv
 import email.message
 import io
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -1192,6 +1193,26 @@ class PageNumberLabelTest(PassageBase):
         run = self.run_script(self.docs)
         self.assertNotIn("\n7\n", self.all_text(run))
         self.assertRegex(run.stdout, r"page number\s*: 1")
+
+    def test_a_bare_number_before_a_line_that_is_not_a_short_title_is_a_page_number(self):
+        cases = {
+            "03\nthe results were slow": "lowercase",
+            "03\nand Then Latency Matters": "first word lowercase, the rest capitalized",
+            "03\nWhy the results were so slow": "first word capitalized, most not",
+            "03\nWhy Latency Matters.": "a sentence end",
+            "03\nWhy The Latency Of These Providers Matters So Much": "9 words, over the 8-word cap",
+            "003\nWhy Latency Matters": "3 digits, not 01 to 99",
+        }
+        for i, (lines, why) in enumerate(cases.items()):
+            with self.subTest(why):
+                label, line = lines.split("\n")
+                self.write(f"doc{i}.txt", f"{prose(200, f'a{i}')}\n\n{lines}\n\n{prose(200, f'b{i}')}\n")
+                run = self.run_script(self.docs / f"doc{i}.txt")
+                text = self.all_text(run)
+                self.assertNotIn(f"\n{label}\n", text)
+                self.assertIn(f"\n{line}\n", text)
+                self.assertRegex(run.stdout, r"page number\s*: 1")
+                shutil.rmtree(self.out)
 
     @unittest.skipIf(os.name == "nt", "the pdftotext stub is a shell script")
     def test_a_lone_number_on_a_page_break_is_still_removed(self):
