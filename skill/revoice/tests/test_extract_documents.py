@@ -182,7 +182,7 @@ class HtmlReaderTest(Base):
         self.assertEqual(row["subject"], "Spring & Seeds")
         self.assertEqual(row["date"], "undated")
         self.assertEqual(run.text("page.html"),
-                         "# Spring & Seeds\n\n# Spring planting\n\nSeeds go in when the soil is warm.\n\n"
+                         "# Spring & Seeds\n\nSpring planting\n\nSeeds go in when the soil is warm.\n\n"
                          "Peas first\n\nBeans later\n\nWater daily.\n")
 
     def test_an_unclosed_heading_ends_at_the_next_block(self):
@@ -305,7 +305,7 @@ class DocxReaderTest(Base):
         # A heading is not prose, so "Our voice" is not counted.
         self.assertEqual((row["subject"], row["date"], row["words"]), ("Brand Guide", "undated", "7"))
         self.assertEqual(run.text("Brand Guide.docx"),
-                         "# Brand Guide\n\n# Our voice\n\nWe write plainly.\n\nWe keep it short.\n")
+                         "# Brand Guide\n\nOur voice\n\nWe write plainly.\n\nWe keep it short.\n")
 
     def test_docx_xml_over_the_limit_is_skipped_and_counted(self):
         self.write("big.docx", docx_bytes(["word " * 400]))
@@ -676,7 +676,7 @@ class BoilerplateTest(PassageBase):
         run = self.run_script(self.docs)
         for row in run.rows:
             self.assertTrue(run.text(row["source"]).startswith("# d"))
-            self.assertIn("\n\n## Introduction\n\n", run.text(row["source"]))
+            self.assertIn("\n\nIntroduction\n\n", run.text(row["source"]))
         self.assertNotIn("repeated", run.stdout)
 
     def test_a_line_repeated_in_the_middle_of_documents_is_not_a_running_line(self):
@@ -819,15 +819,15 @@ class PassageTest(PassageBase):
                              f"{prose(200, 'h2')}\n\n## Aside\n\n{prose(100, 'h3')}\n\n# Trailing heading\n")
         run = self.run_script(self.docs)
         texts = sorted(self.samples(run))
-        self.assertEqual(texts, [f"# doc\n\n# Part one\n\n{prose(360, 'h1')}\n",
-                                 f"# doc\n\n## Part two\n\nPart two is next\n\n{prose(200, 'h2')}\n\n"
+        self.assertEqual(texts, [f"# doc\n\nPart one\n\n{prose(360, 'h1')}\n",
+                                 f"# doc\n\nPart two\n\nPart two is next\n\n{prose(200, 'h2')}\n\n"
                                  f"{prose(100, 'h3')}\n"])
         self.assertEqual(sorted(int(r["words"]) for r in run.rows), [304, 360])
 
     def test_a_heading_with_no_blank_line_before_it_starts_the_next_passage(self):
         self.write("doc.md", f"{prose(360, 'n1')}\n## Next part\n{prose(200, 'n2')}\n")
         run = self.run_script(self.docs)
-        self.assertEqual(sorted(self.samples(run)), [f"# doc\n\n## Next part\n\n{prose(200, 'n2')}\n",
+        self.assertEqual(sorted(self.samples(run)), [f"# doc\n\nNext part\n\n{prose(200, 'n2')}\n",
                                                     f"# doc\n\n{prose(360, 'n1')}\n"])
         self.assertEqual(sorted(int(r["words"]) for r in run.rows), [200, 360])
 
@@ -1132,6 +1132,11 @@ class TitleSuffixTest(Base):
         self.assertEqual(sorted(r["subject"] for r in run.rows),
                          ["My Post - DEV Community", "Other Post - Example Blog"])
 
+    def test_other_separators_and_only_the_last_one_count(self):
+        self.assertEqual(ed.strip_site_names(["A - B | Acme", "C \u2013 Acme", "D \u2014 Acme", "E-Acme",
+                                              "Notes | Other"]),
+                         ["A - B", "C", "D", "E-Acme", "Notes | Other"])
+
     def test_a_file_title_is_not_a_site_name(self):
         self.write("a.md", f"---\ntitle: Notes - Draft\n---\n{prose(20, 'a')}\n")
         self.write("b.md", f"---\ntitle: Plans - Draft\n---\n{prose(20, 'b')}\n")
@@ -1236,6 +1241,12 @@ class HyphenJoinTest(PassageBase):
             run = self.run_script(self.docs)
         self.assertNotIn("hyphen", run.stdout)
         self.assertNotIn("join", run.stdout)
+
+    def test_join_hyphens_leaves_a_hyphenated_continuation_and_a_capital_alone(self):
+        self.assertEqual(ed.join_hyphens("near real-\ntime-critical work\nrealtime"),
+                         "near real-\ntime-critical work\nrealtime")
+        self.assertEqual(ed.join_hyphens("New-\nYork\nnewyork"), "New-\nYork\nnewyork")
+        self.assertEqual(ed.join_hyphens("a real-\ntime, b\nrealtime"), "a realtime,\nb\nrealtime")
 
     def test_text_files_are_not_joined(self):
         self.write("note.txt", f"{prose(100, 'a')} We need real-\ntime answers.\n\n{prose(100, 'b')} realtime.\n")
