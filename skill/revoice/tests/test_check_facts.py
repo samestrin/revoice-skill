@@ -123,6 +123,14 @@ class CheckFactsTest(unittest.TestCase):
         code, out, _ = self.run_check("Due 3 May.", "Due May 3.")
         self.assertEqual((code, out), (0, ""))
 
+    def test_year_first_slash_date_matches_iso(self):
+        code, out, _ = self.run_check("Due 2026-11-20.", "Due 2026/11/20.")
+        self.assertEqual((code, out), (0, ""))
+
+    def test_day_month_with_year_matches_iso(self):
+        code, out, _ = self.run_check("Due 2026-05-03.", "Due 3 May 2026.")
+        self.assertEqual((code, out), (0, ""))
+
     def test_abbreviated_month_name_matches_iso(self):
         code, out, _ = self.run_check("Due 2026-11-20.", "Due Nov 20, 2026.")
         self.assertEqual((code, out), (0, ""))
@@ -200,6 +208,16 @@ class CheckFactsTest(unittest.TestCase):
         orig = self.dir / "original.txt"
         orig.write_text("anything", encoding="utf-8")
         code, out, err = self.run_paths(orig, self.dir / "nope.txt")
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertEqual(len(err.strip().splitlines()), 1)
+
+    def test_undecodable_file_exits_2_with_one_stderr_line(self):
+        orig = self.dir / "original.txt"
+        orig.write_bytes(b"caf\xe9 latin-1, not utf-8")
+        rew = self.dir / "rewrite.txt"
+        rew.write_text("anything", encoding="utf-8")
+        code, out, err = self.run_paths(orig, rew)
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
         self.assertEqual(len(err.strip().splitlines()), 1)
