@@ -1,6 +1,6 @@
 # revoice
 
-A Claude Code skill that rewrites text so it sounds like you wrote it, not an AI. It works from a voice profile built from your own corpus of text, for example your email from before AI tools existed.
+A Claude Code skill that rewrites text so it sounds like you wrote it, not an AI. It works from a voice profile built from your own corpus of text: your email, your writing, or your brand's documents.
 
 ```
 /revoice <text>
@@ -12,16 +12,16 @@ Getting started is three steps: install the skill, save your API key, and run `/
 
 ## How it works
 
-1. You export your sent email as an MBOX file.
-2. `/revoice --build` keeps only emails from before AI tools, pulls out what you wrote yourself, and reviews them on your machine with plain rules to keep the ones that really sound like you.
+1. You point the build at your writing: an email export (MBOX), a folder of your own writing, or a folder of brand documents.
+2. `/revoice --build` pulls out what you wrote yourself — for email, only messages from before AI tools — and reviews them on your machine with plain rules to keep the ones that really sound like you.
 3. A text analysis API measures the style of the kept samples.
-4. Claude turns the measurements plus your real emails into a voice file, one readable Markdown file.
+4. Claude turns the measurements plus your real writing into a voice file, one readable Markdown file.
 5. `/revoice` uses that file to rewrite any text in your voice.
 
 ## Requirements
 
 - Claude Code.
-- Python 3.10 or newer. The helpers use only the standard library, except `--sync`, which needs PyYAML (`pip install pyyaml`). On Windows, Python runs as `python`; `python3` there is usually a Microsoft Store shortcut.
+- Python 3.10 or newer. The helpers use only the standard library, except `--sync`, which needs PyYAML (`pip install pyyaml`). Reading `.pdf` files also uses the `pdftotext` program (poppler) when it is installed; without it, PDFs are skipped. On Windows, Python runs as `python`; `python3` there is usually a Microsoft Store shortcut.
 - An API key for the text analysis API. It is only needed to build the profile, not to use the skill.
 
 ## Getting an API key
@@ -44,6 +44,14 @@ cost = 1 + kept samples + reference emails + min(kept samples, 100)
 - 149 kept samples plus 200 reference emails: 1 + 149 + 200 + 100 = 450 credits (add 1 for the key check).
 
 A default build (at most 148 samples, no reference set) costs at most 1 + 148 + 100 = 249 credits, plus 1 for the key check: 250, exactly the free grant. The re-check before the build spends anything is the free `--estimate`. Adding the reference set costs more: one extra credit per reference email, so you need to buy a credit pack first if that takes the total over your balance. The build checks your balance before it spends and stops if it cannot cover the cost. The API's docs at https://api.yourvoice.dev/ list what each request costs.
+
+For documents (your writing or brand documents), a passage is a sample and there is no reference set, so the same formula counts passages:
+
+```text
+cost = 1 + kept passages + min(kept passages, 100)
+```
+
+20 documents of about 1,500 words give about 85 passages: 1 + 85 + 85 = 171 credits, plus 1 for the key check — well inside the 250 free credits.
 
 ## Text analysis API
 
@@ -186,15 +194,19 @@ No clipboard tool? Run `mkdir -p ~/.config/revoice && cat > ~/.config/revoice/ap
 
 ## 3. Build your voice profile
 
-First export your sent mail. For Gmail, use Google Takeout, choose Mail, and pick only the "Sent" label. You get an `.mbox` file. Large exports are fine.
-
-Then, in Claude Code:
+In Claude Code:
 
 ```
 /revoice --build
 ```
 
-Claude asks for the `.mbox` path, the addresses you send from, your name, and a few defaults, then does the rest: filtering, extracting, reviewing the samples on your machine, building the profile, and writing your voice file. You review and approve the samples before the upload: before any sample is sent to the API, Claude stops, tells you how many are kept and that they are plain files in the work folder's `samples/`, and waits for your go. To keep one from being sent, change its `verdict` to DROP in `samples/index.csv`. Claude Code asks you to approve when it saves the voice file to `~/.config/revoice/voices/`. At the end it rewrites a sample email so you can see the result.
+The first question is where your writing is: an email export, a folder of your own writing, or a folder of brand documents. Claude then asks only what that source needs and does the rest: extracting, reviewing the samples on your machine, building the profile, and writing your voice file. You review and approve the samples before the upload: before any sample is sent to the API, Claude stops, tells you how many are kept and that they are plain files in the work folder's `samples/`, and waits for your go. To keep one from being sent, change its `verdict` to DROP in `samples/index.csv`. Claude Code asks you to approve when it saves the voice file to `~/.config/revoice/voices/`. At the end it rewrites a sample text so you can see the result.
+
+### From an email export
+
+Export your sent mail. For Gmail, use Google Takeout, choose Mail, and pick only the "Sent" label. You get an `.mbox` file. Large exports are fine.
+
+Claude asks for the `.mbox` path, the addresses you send from, your name, and a few defaults, including the cutoff date that keeps AI-assisted writing out.
 
 You can also give the answers up front:
 
@@ -202,13 +214,45 @@ You can also give the answers up front:
 /revoice --build mbox=C:\Users\you\Downloads\Sent.mbox from=you@example.com,you@work.com name="Your Name"
 ```
 
+### From a folder of your writing
+
+Point the build at a folder (or single files) of your own articles, posts or essays. It reads `.md`, `.txt`, `.html`/`.htm`, `.docx` and `.pdf`. A `.pdf` needs the `pdftotext` program (poppler) on your PATH; without it, the file is skipped: install poppler, or save it as `.docx` or `.txt`. Other types are skipped and counted.
+
+You can also give a `--urls` list: a text file with one `http` or `https` URL per line, for pages you own. Your machine fetches the pages one at a time; the build never follows links.
+
+Each document is split into passages of about 350 words (150 to 500), never cutting a paragraph; code, tables, navigation, footers, legal lines and duplicates are dropped. One passage is one sample. At most 148 passages are kept, taken in turn from each document.
+
+Claude asks for your name and two confirmations: that this is your own writing, not AI-assisted, and that you may send it to the text analysis API and to Claude. A cutoff date is optional and only checks a `date:` in a document's front matter; undated documents are kept.
+
+### From a folder of brand documents
+
+Point the build at a folder of a business's documents: several authors, one brand voice. It reads the same `.md`, `.txt`, `.html`/`.htm`, `.docx` and `.pdf` files (the same `pdftotext` note applies) and the same `--urls` list. The profile is named for the brand, and every author's passages are kept.
+
+Brand documents are often confidential. The build says so plainly and asks you to confirm you may send these documents before it reads them; take anything you may not send to a third-party API or to Claude (client names, prices, internal project names) out of the folder first.
+
+### How much writing you need
+
+A passage is about 350 words. The review counts what it keeps:
+
+| Source | Hard floor (the build stops) | Minimum (warns, asks to continue) | Recommended |
+|---|---|---|---|
+| Email | 1 KEEP sample | 15 KEEP samples | 20+ samples |
+| Writing | 10 KEEP passages | 20 KEEP passages from at least 5 documents | 40+ passages from 10+ documents (about 15,000 words) |
+| Brand | 10 KEEP passages from at least 3 documents | 20 KEEP passages from at least 5 documents | 40+ passages from 12+ documents by at least 3 authors if known |
+
+Below the hard floor the build stops before anything is uploaded and tells you how many more documents or words you need. Between the floor and the minimum it says the profile will be weaker and asks whether to continue.
+
 Read the voice file it wrote (`~/.config/revoice/voices/<your-slug>.md`) and fix anything that does not sound like you. It is plain Markdown, and you can edit it any time.
 
-**What leaves your machine.** The full mailbox never does. The build pulls out up to 148 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The KEEP/DROP review runs on your machine and sends nothing anywhere. You review and approve the samples before the upload: none of your samples is sent until you say go, and a sample you mark DROP is never sent. To build the profile, the text analysis API gets, over HTTPS, only the kept samples (up to the 148 extracted, sent in batches of 100; the fingerprint step uses at most 100 of them) plus, only if you opt in, the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The reference set is off by default and costs extra credits; leave it off to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. Rewriting text with `/revoice` never touches the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
+**What leaves your machine.** Email: the full mailbox never does. The build pulls out up to 148 of your longest emails as samples (change this with `--max-samples` if you run the steps by hand). The KEEP/DROP review runs on your machine and sends nothing anywhere. You review and approve the samples before the upload: none of your samples is sent until you say go, and a sample you mark DROP is never sent. To build the profile, the text analysis API gets, over HTTPS, only the kept samples (up to the 148 extracted, sent in batches of 100; the fingerprint step uses at most 100 of them) plus, only if you opt in, the reference set: up to 200 emails from other senders in the same mailbox, which the build compares your writing against so your signature phrases come out specific. The reference set is off by default and costs extra credits; leave it off to keep other people's email off the API. Claude reads only the samples the profile is built from — 15 by default, `--top` if you run the steps by hand — to write the voice file, so those go to your Claude model provider like anything else you show Claude. Rewriting text with `/revoice` never touches the API. The work folder (default `~/revoice-build/<your-slug>`) holds your extracted email; delete it once you are happy with the voice file:
 
 Windows (PowerShell): `Remove-Item -Recurse -Force "$HOME\revoice-build\<your-slug>"`
 
 macOS or Linux: `rm -rf ~/revoice-build/<your-slug>`
+
+**Writing samples:** the folder never leaves the machine as a whole. Extraction and the KEEP/DROP review run on your machine. To build the profile, only the kept passages (up to 148, sent in batches of 100; the fingerprint step uses at most 100 of them) go to the text analysis API over HTTPS, and only after you approve them; the 15 passages the profile is built from are read by Claude, so those go to your Claude model provider like anything else you show Claude. For a `--urls` list, your machine fetches the pages; nothing is sent to the API before you approve the samples. There is no reference set. The work folder holds your passages; delete it the same way once you are happy with the voice file.
+
+**Brand documents are often confidential.** Before you build, take anything you may not send to a third-party API or to Claude out of the folder: client names, prices, internal project names. The warning is plain, and the build asks you to confirm you may send these documents before it reads them. What leaves is the same as for writing samples: only the kept passages go to the text analysis API over HTTPS after you approve them, and the 15 the profile is built from are read by Claude. Several authors is the point: every author's passages are kept, and the profile is named for the brand.
 
 ### If the build stops
 
@@ -237,7 +281,7 @@ The skill keeps every fact, number, name and ask from the input. It does not add
 
 ## Running the steps by hand
 
-The helpers are in `skill/revoice/build/` and each has `--help`. The order is `mbox-filter-before.py`, `extract-samples.py` (again with `--others` for the reference set), `review-samples.py` (runs locally, no network or API key), then `build-profile.py`. `skill/revoice/build.md` describes each step and the voice file format.
+The helpers are in `skill/revoice/build/` and each has `--help`. For email the order is `mbox-filter-before.py`, `extract-samples.py` (again with `--others` for the reference set), `review-samples.py` (runs locally, no network or API key), then `build-profile.py`. For documents it is `extract-documents.py`, `review-samples.py --mode writing|brand`, then `build-profile.py --source-type writing|brand`. `skill/revoice/build.md` describes each step and the voice file format.
 
 ## Optional: SilverBullet
 

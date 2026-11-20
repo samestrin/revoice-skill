@@ -235,5 +235,156 @@ class TestReadmeTroubleshooting(unittest.TestCase):
         self.assertIn("check your internet connection", line)
 
 
+class TestReadmeThreeSources(unittest.TestCase):
+    """Epic 17: the README names the three sources and their honest counts."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = README.read_text(encoding="utf-8")
+        start = cls.text.index("## 3. Build your voice profile")
+        cls.build = cls.text[start:cls.text.index("\n## ", start + 1)]
+
+    def subsection(self, heading):
+        start = self.build.index(heading)
+        end = self.build.find("\n### ", start + 1)
+        return self.build[start:end if end != -1 else len(self.build)]
+
+    def test_intro_names_three_sources(self):
+        intro = self.text[:self.text.index("## How it works")]
+        self.assertIn("your email, your writing, or your brand's documents", intro)
+
+    def test_how_it_works_names_three_sources(self):
+        start = self.text.index("## How it works")
+        section = self.text[start:self.text.index("\n## ", start + 1)]
+        self.assertIn("an email export (MBOX), a folder of your own writing, or a folder of brand documents", section)
+
+    def test_three_subsections_in_order(self):
+        headings = ["### From an email export", "### From a folder of your writing",
+                    "### From a folder of brand documents"]
+        positions = [self.build.index(h) for h in headings]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_first_question_is_the_source(self):
+        intro = self.build[:self.build.index("### From an email export")]
+        self.assertIn("The first question is where your writing is: an email export, a folder of your own writing, or a folder of brand documents.", intro)
+
+    def test_email_subsection_keeps_takeout_and_upfront_answers(self):
+        sub = self.subsection("### From an email export")
+        self.assertIn("Google Takeout", sub)
+        self.assertIn(".mbox", sub)
+        self.assertIn("mbox=", sub)
+        self.assertIn("from=", sub)
+
+    def test_file_types(self):
+        for sub in (self.subsection("### From a folder of your writing"),
+                    self.subsection("### From a folder of brand documents")):
+            for ext in (".md", ".txt", ".html", ".docx", ".pdf"):
+                self.assertIn(ext, sub)
+
+    def test_pdftotext_note(self):
+        sub = self.subsection("### From a folder of your writing")
+        self.assertIn("pdftotext", sub)
+        self.assertIn("poppler", sub)
+        self.assertIn("save it as `.docx` or `.txt`", sub)
+
+    def test_urls_list(self):
+        sub = self.subsection("### From a folder of your writing")
+        self.assertIn("--urls", sub)
+        self.assertIn("a text file with one `http` or `https` URL per line, for pages you own", sub)
+
+    def test_passages_and_cap(self):
+        sub = self.subsection("### From a folder of your writing")
+        self.assertIn("passages of about 350 words (150 to 500)", sub)
+        self.assertIn("At most 148 passages are kept, taken in turn from each document.", sub)
+
+    def test_writing_confirmations(self):
+        sub = self.subsection("### From a folder of your writing")
+        self.assertIn("your own writing, not AI-assisted", sub)
+        self.assertIn("you may send it to the text analysis API and to Claude", sub)
+
+    def test_counts_table(self):
+        self.assertIn("| Email | 1 KEEP sample | 15 KEEP samples | 20+ samples |", self.build)
+        self.assertIn("| Writing | 10 KEEP passages | 20 KEEP passages from at least 5 documents | 40+ passages from 10+ documents (about 15,000 words) |", self.build)
+        self.assertIn("| Brand | 10 KEEP passages from at least 3 documents | 20 KEEP passages from at least 5 documents | 40+ passages from 12+ documents by at least 3 authors if known |", self.build)
+
+    def test_below_floor_and_minimum(self):
+        self.assertIn("Below the hard floor the build stops before anything is uploaded and tells you how many more documents or words you need.", self.build)
+        self.assertIn("Between the floor and the minimum it says the profile will be weaker and asks whether to continue.", self.build)
+
+    def test_brand_subsection_confidentiality(self):
+        sub = self.subsection("### From a folder of brand documents")
+        self.assertIn("Brand documents are often confidential.", sub)
+        self.assertIn("confirm", sub)
+        self.assertIn("several authors, one brand voice", sub)
+
+
+class TestReadmeDocumentCost(unittest.TestCase):
+    """Epic 17: the cost section gives the passages formula and the 20-document example."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = README.read_text(encoding="utf-8")
+        start = cls.text.index("### What a build costs")
+        cls.section = cls.text[start:cls.text.index("\n## ", start + 1)]
+
+    def test_passages_formula(self):
+        self.assertIn("cost = 1 + kept passages + min(kept passages, 100)", self.section)
+
+    def test_twenty_document_example(self):
+        self.assertIn("20 documents of about 1,500 words give about 85 passages: 1 + 85 + 85 = 171 credits", self.section)
+
+    def test_no_reference_set_for_documents(self):
+        self.assertIn("no reference set", self.section)
+
+
+class TestReadmePrivacyPerMode(unittest.TestCase):
+    """Epic 17: What leaves your machine is stated per mode, with the brand warning."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = README.read_text(encoding="utf-8")
+
+    def paragraph(self, marker):
+        start = self.text.index(marker)
+        return self.text[start:self.text.index("\n", start)]
+
+    def test_email_paragraph_is_first_and_labels_the_mode(self):
+        p = self.paragraph("**What leaves your machine.**")
+        self.assertIn("Email: the full mailbox never does.", p)
+
+    def test_writing_paragraph(self):
+        p = self.paragraph("**Writing samples:**")
+        self.assertIn("the folder never leaves the machine as a whole", p)
+        self.assertIn("only the kept passages (up to 148, sent in batches of 100; the fingerprint step uses at most 100 of them) go to the text analysis API over HTTPS", p)
+        self.assertIn("the 15 passages the profile is built from are read by Claude", p)
+        self.assertIn("your machine fetches the pages", p)
+        self.assertIn("only after you approve them", p)
+
+    def test_brand_confidentiality_paragraph(self):
+        p = self.paragraph("**Brand documents are often confidential.**")
+        self.assertIn("take anything you may not send to a third-party API or to Claude out of the folder", p)
+        self.assertIn("the build asks you to confirm you may send these documents", p)
+        self.assertIn("only the kept passages", p)
+
+
+class TestReadmeDocumentHelpers(unittest.TestCase):
+    """Epic 17: the by-hand helper list covers the document path."""
+
+    @classmethod
+    def setUpClass(cls):
+        text = README.read_text(encoding="utf-8")
+        start = text.index("## Running the steps by hand")
+        cls.section = text[start:text.index("\n## ", start + 1)]
+
+    def test_document_helper_order(self):
+        self.assertIn("extract-documents.py", self.section)
+        self.assertIn("review-samples.py --mode writing|brand", self.section)
+        self.assertIn("build-profile.py --source-type writing|brand", self.section)
+
+    def test_email_helper_order_kept(self):
+        self.assertIn("mbox-filter-before.py", self.section)
+        self.assertIn("extract-samples.py", self.section)
+
+
 if __name__ == "__main__":
     unittest.main()
