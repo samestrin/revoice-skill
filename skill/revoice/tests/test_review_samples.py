@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _load import BUILD, load, run_main
+from _load import BUILD, load, real_run_body, run_main
 
 rs = load(BUILD / "review-samples.py", "review_samples")
 
@@ -561,6 +561,130 @@ class ModeMain(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
         self.assertIn("invalid choice", p.stderr)
         self.assertIn("--mode", self.run_cli("--help").stdout)
+
+    def test_one_document_is_singular(self):
+        passage_dir(self.dir, [passage(i) for i in range(10)], ["only.md"] * 10)
+        p = self.run_cli("--mode", "writing")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("coverage: 10 KEEP passages from 1 document\n", p.stdout)
+        self.assertNotIn("1 documents", p.stdout + p.stderr)
+
+    def test_below_the_minimum_documents_warns(self):
+        # One article saved three ways is one document (T2); 25 passages from 3 is weaker.
+        passage_dir(self.dir, [passage(i) for i in range(25)], [f"d{i % 3}.md" for i in range(25)])
+        p = self.run_cli("--mode", "writing")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("coverage: 25 KEEP passages from 3 documents\n", p.stdout)
+        self.assertIn("below the minimum for writing: 20 KEEP passages from 5 documents "
+                      "give a stronger profile; this one will be weaker", p.stdout)
+
+    def test_at_the_minimum_no_warning(self):
+        passage_dir(self.dir, [passage(i) for i in range(25)], [f"d{i % 5}.md" for i in range(25)])
+        p = self.run_cli("--mode", "brand")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("coverage: 25 KEEP passages from 5 documents\n", p.stdout)
+        self.assertNotIn("weaker", p.stdout)
+
+
+# Excerpts from the operator's real 0.3.0 run (tests/fixtures/real_run/README.md).
+REAL_PROSE = [real_run_body(f"prose_{n}.md") for n in (
+    "comparing13_a", "comparing13_b", "72faster_a", "72faster_b", "llmenv_a", "llmenv_b")]
+REAL_LLM_OUTPUT = {n: real_run_body(f"{n}.md")
+                   for n in ("llm_output_docx_a", "llm_output_docx_b", "llm_output_pdf_a")}
+REAL_TABLE = real_run_body("table_docx_numbers.md")
+DOCUMENT_MODES = ("writing", "brand")
+
+
+class RealRun(unittest.TestCase):
+    """Bugs 2 and 6: quoted model output and table text, judged in a set like the real one."""
+
+    def judge(self, text, mode):
+        return rs.review([text, *REAL_PROSE], "Sam Estrin", mode)[0]
+
+    def test_quoted_model_output_dropped_in_document_modes(self):
+        for mode in DOCUMENT_MODES:
+            for name, text in REAL_LLM_OUTPUT.items():
+                with self.subTest(mode=mode, passage=name):
+                    r = self.judge(text, mode)
+                    self.assertEqual((r["verdict"], r["reason"]), ("DROP", "quoted model output"))
+
+    def test_table_dropped_in_document_modes(self):
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                r = self.judge(REAL_TABLE, mode)
+                self.assertEqual((r["verdict"], r["reason"]), ("DROP", "table or numbers"))
+
+    def test_real_prose_kept(self):
+        texts = [*REAL_PROSE, *REAL_LLM_OUTPUT.values(), REAL_TABLE]
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                out = rs.review(texts, "Sam Estrin", mode)[:len(REAL_PROSE)]
+                self.assertEqual([(o["verdict"], o["reason"]) for o in out],
+                                 [("KEEP", "own writing")] * len(REAL_PROSE))
+
+    def test_synthetic_prose_kept_in_document_modes(self):
+        texts = [PROSE, *(t for _, t in KEEP_CASES), QUOTED, SIGNED_BY_OTHER, BYLINE_OWN,
+                 *(passage(i) for i in range(12))]
+        for mode in DOCUMENT_MODES:
+            self.assertEqual([o["verdict"] for o in rs.review(FILLERS, "Sam Lee", mode)],
+                             ["KEEP"] * len(FILLERS))
+            for text in texts:
+                with self.subTest(mode=mode, text=text[:40]):
+                    self.assertEqual(rs.review([text, *FILLERS], "Sam Lee", mode)[0]["verdict"],
+                                     "KEEP")
+
+    def test_email_mode_judges_them_as_before(self):
+        # Pinned from main at 10d30cb: email has neither rule.
+        texts = [*REAL_LLM_OUTPUT.values(), REAL_TABLE, *REAL_PROSE]
+        out = rs.review(texts, "Sam Estrin", "email")
+        self.assertEqual([(o["verdict"], o["reason"], o["score"]) for o in out],
+                         [("KEEP", "own writing", 5)] * 8 + [("KEEP", "own writing", 4)] * 2)
+        self.assertEqual(rs.review(texts, "Sam Estrin"), out)
+
+    def test_synthetic_model_output_shapes(self):
+        cases = {
+            "colon lead-in": "Here is what ChatGPT said:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            # Most of the words come before the lead-in, so only its short block decides.
+            "prompt with a short block": PROSE.rsplit("\n\n", 1)[0]
+                                         + "\n\nThe prompt:\nlist three fruits\nno prose\nkeep it short",
+            # Lines the code rule above does not see (no "$ ", no closing brace).
+            "code-like lines": "\n".join([
+                "This is what came back from the call.",
+                ">>> response = client.chat(model='small', messages=history, temperature=0)",
+                '{"model": "small", "messages": [], "stream": false, "max_tokens": 256},',
+                "curl -s https://example.com/v1/chat -H 'Accept: application/json' -d @body.json"]),
+        }
+        for name, text in cases.items():
+            for mode in DOCUMENT_MODES:
+                with self.subTest(name, mode=mode):
+                    self.assertEqual(self.judge(text, mode)["reason"], "quoted model output")
+
+    def test_model_words_in_prose_are_not_a_lead_in(self):
+        cases = [
+            # A colon inside a line, a long lead-in sentence, an ordinary heading.
+            "My answer: ship it. " + FILLERS[0] + "\n\n" + FILLERS[1],
+            "This is a long sentence that mentions the model and the prompt and ends with a colon:\n\n"
+            + FILLERS[0],
+            "Our Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            # A paragraph that opens with a price is not a shell prompt.
+            "$2,400 later, " + FILLERS[0] + " " + FILLERS[1] + "\n\n" + FILLERS[2],
+            # A "...:" lead-in followed by sentences is not a quoted block.
+            PROSE.rsplit("\n\n", 1)[0] + "\n\nThe prompt:\nI asked for a plan.\nIt gave one.\nI used it.",
+        ]
+        for text in cases:
+            for mode in DOCUMENT_MODES:
+                with self.subTest(text[:30], mode=mode):
+                    self.assertEqual(self.judge(text, mode)["verdict"], "KEEP")
+
+    def test_short_lines_without_digits_are_not_a_table(self):
+        text = "Plan\n\nBuild\n\nShip\n\nRepeat\n\n" + FILLERS[0]
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                self.assertNotEqual(self.judge(text, mode)["reason"], "table or numbers")
+
+    def test_new_reasons_are_listed(self):
+        self.assertIn("quoted model output", rs.REASONS)
+        self.assertIn("table or numbers", rs.REASONS)
 
 
 class CliContract(unittest.TestCase):

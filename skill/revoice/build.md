@@ -102,7 +102,7 @@ Run from `WORK`, with the mode from phase 1 (`email`, `writing` or `brand`):
 <python> SKILL/build/review-samples.py --author "<Name>" --mode <mode>
 ```
 
-It runs on this machine with no network and no API key. It marks each sample KEEP or DROP and adds `verdict,score,reason` columns to `samples/index.csv`. `--author` lets it drop a sample signed (email) or bylined (writing) with a clearly different name; for `brand` give the brand name, it is not used. Do not read the samples yourself. Report the KEEP vs DROP counts it prints, and the top 3 drop reasons from the CSV's `reason` column.
+It runs on this machine with no network and no API key. It marks each sample KEEP or DROP and adds `verdict,score,reason` columns to `samples/index.csv`. `--author` lets it drop a sample signed (email) or bylined (writing) with a clearly different name; for `brand` give the brand name, it is not used. For `writing` and `brand` it also drops quoted model output (`quoted model output`) and one-cell-per-line table text (`table or numbers`). Do not read the samples yourself. Report the KEEP vs DROP counts it prints, and the top 3 drop reasons from the CSV's `reason` column.
 
 ### Email
 
