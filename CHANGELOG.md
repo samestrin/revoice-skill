@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- README: the opt-in reference set is up to 148 emails from other senders, not 200; it is extracted with the same `--max-samples` cap as your samples. `test_readme_claims.py` pins the count to the script's default.
+- `.claude-plugin/plugin.json`: the description says `--build` builds a voice from an email export, a folder of your own writing, or a folder of brand documents, not from an email export only. `test_plugin_manifest.py` pins the three sources.
+
 ## [0.3.0] - 2026-11-20
 
 ### Added

@@ -84,6 +84,14 @@ class PluginJsonTest(unittest.TestCase):
         self.assertEqual(self.plugin["license"], "MIT")
         self.assertRegex(self.plugin["homepage"], r"^https://")
 
+    def test_description_names_the_three_build_sources(self):
+        # --build reads an email export, a folder of your own writing or a
+        # folder of brand documents; the manifest must not say email only.
+        description = self.plugin["description"]
+        self.assertIn("--build builds a voice from an email export", description)
+        self.assertIn("a folder of your own writing", description)
+        self.assertIn("a folder of brand documents", description)
+
     def test_skills_path_keeps_skill_folder(self):
         self.assertEqual(self.plugin["skills"], "./skill")
         self.assertTrue((ROOT / "skill" / "revoice" / "SKILL.md").is_file())
