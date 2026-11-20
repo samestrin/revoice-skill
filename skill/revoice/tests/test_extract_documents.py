@@ -733,6 +733,22 @@ class PassageTest(PassageBase):
                                  f"{prose(100, 'h3')}\n"])
         self.assertEqual(sorted(int(r["words"]) for r in run.rows), [304, 360])
 
+    def test_a_heading_with_no_blank_line_before_it_starts_the_next_passage(self):
+        self.write("doc.md", f"{prose(360, 'n1')}\n## Next part\n{prose(200, 'n2')}\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(self.samples(run)), [f"# doc\n\n## Next part\n\n{prose(200, 'n2')}\n",
+                                                    f"# doc\n\n{prose(360, 'n1')}\n"])
+        self.assertEqual(sorted(int(r["words"]) for r in run.rows), [200, 360])
+
+    def test_a_short_sentence_before_one_over_500_words_keeps_its_place(self):
+        long = " ".join(f"z{i}" for i in range(1100))
+        para = f"Short first. {long}"
+        self.assertEqual(ed.split_paragraph(para),
+                         ["Short first.", " ".join(long.split()[:500]),
+                          " ".join(long.split()[500:1000]), " ".join(long.split()[1000:])])
+        self.assertEqual([len(p.split()) for p in ed.split_paragraph(para)], [2, 500, 500, 100])
+        self.assertEqual(" ".join(ed.split_paragraph(para)).split(), para.split())
+
     def test_a_document_of_headings_only_has_no_text(self):
         self.write("heads.md", "# One\n\n## Two\n")
         run = self.run_script(self.docs)
@@ -828,6 +844,19 @@ class DedupeAndCapTest(PassageBase):
             with self.assertRaises(SystemExit), mock.patch.object(sys, "stderr", err):
                 run_main(ed, str(self.docs), flag, "-1", "-o", str(self.out))
             self.assertIn(flag, err.getvalue())
+
+
+    def test_two_passages_that_would_share_a_file_name_write_one_file(self):
+        self.write("a.md", f"---\ntitle: Same\n---\n{prose(200, 'fa')}\n")
+        self.write("b.md", f"---\ntitle: Same\n---\n{prose(200, 'fb')}\n")
+        real = ed._key
+        with mock.patch.object(ed, "_key", lambda text: "abcdef" + real(text)):
+            run = self.run_script(self.docs)
+        self.assertEqual(len(run.rows), 1)
+        self.assertEqual(run.rows[0]["file"], "same_01_abcdef.md")
+        self.assertEqual(run.text(run.rows[0]["source"]).split("\n\n", 1)[1],
+                         (self.docs / run.rows[0]["source"]).read_text().split("---\n")[-1])
+        self.assertRegex(run.stdout, r"duplicate\s*: 1")
 
 
 class BeforeTest(PassageBase):
