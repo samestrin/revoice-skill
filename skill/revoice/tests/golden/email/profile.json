@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "author": "Alex Rivera",
+    "generated": "2026-11-20",
+    "source_type": "email",
+    "source": "email export, attachments ignored, reviewed samples",
+    "sender_addresses": [
+      "alex@example.com"
+    ],
+    "api": {
+      "url": "http://fake.api",
+      "version": "9.9.9"
+    },
+    "samples": {
+      "voice_profile": [
+        "2022-08-15_garden-plans_826300.md",
+        "2022-08-30_naive-date_3ebe15.md",
+        "2022-08-31_timezone-edge_73b2e7.md",
+        "2022-09-01_exactly-at-the-cut-off_b717cc.md",
+        "undated_garbled-date_db03dd.md",
+        "2022-08-31_late-summer_cafc12.md",
+        "undated_no-date-header_707379.md",
+        "2022-10-14_autumn_957d95.md"
+      ],
+      "fingerprint_and_baseline": 8
+    },
+    "reference": {
+      "description": "emails by other senders in the same mailbox",
+      "count": 0
+    }
+  },
+  "voice_profile": {
+    "feature_vector": {
+      "avg_sentence_length": 10.0,
+      "contractions": 0.5
+    },
+    "summary": "s"
+  },
+  "comparison": {
+    "usage": "POST /analyze/compare-profiles with profiles [author, candidate] and options.baseline; set the author's feature_vector to author_feature_vector_mean",
+    "baseline": {
+      "mean": {
+        "avg_sentence_length": 10.0,
+        "contractions": 0.5
+      },
+      "std": {
+        "avg_sentence_length": 0.0,
+        "contractions": 0.0
+      }
+    },
+    "author_feature_vector_mean": {
+      "avg_sentence_length": 10.0,
+      "contractions": 0.5
+    }
+  },
+  "fingerprint": {
+    "distinctive_phrases": [
+      "the hill route"
+    ],
+    "first_person_patterns": [],
+    "informality": 0.2,
+    "corpus_document_count": 8
+  }
+}
