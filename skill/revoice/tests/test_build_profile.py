@@ -1,3 +1,4 @@
+import contextlib
 import io
 import json
 import os
@@ -8,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
-from _load import BUILD, load, run_main
+from _load import BUILD, load, real_run_body, run_main
 
 bp = load(BUILD / "build-profile.py", "build_profile")
 es = load(BUILD / "extract-samples.py", "extract_samples")
@@ -593,6 +594,131 @@ class BuildProfileTest(unittest.TestCase):
         self.assertIn("costs 7 credits", self.stdout)
         self.assertEqual(api.credits, 1000 - 7)
         self.assertEqual(sum(len(r["body"]["texts"]) for r in api.metered()), 7)
+
+    # Profile samples taken in turn per document (Epic 19 T6, bug 1).
+
+    PROSE = {  # the real run's articles, two genuine prose passages each
+        "https://dev.to/a/comparing-13-llm-providers": ("prose_comparing13_a.md", "prose_comparing13_b.md"),
+        "https://dev.to/a/72-faster-ai-workflows": ("prose_72faster_a.md", "prose_72faster_b.md"),
+        "https://dev.to/a/stop-juggling-api-keys": ("prose_llmenv_a.md", "prose_llmenv_b.md"),
+    }
+
+    def real_run_index(self, per_source: dict[str, int]):
+        """KEEP passages, all score 5 as in the real run, n per source; the first
+        source's passages are the longest, the way one article took 14 of 15."""
+        rows = []
+        for d, (source, n) in enumerate(per_source.items()):
+            names = self.PROSE[source]
+            for i in range(n):
+                rows.append({"file": f"d{d}_{i:02d}.md", "words": 900 - 300 * d - i,
+                             "verdict": "KEEP", "score": 5, "source": source,
+                             "text": real_run_body(names[i % 2]).replace("\n", " ")})
+        write_samples(self.samples, rows)
+        return rows
+
+    def voice_profile_files(self):
+        return json.loads(self.out.read_text())["meta"]["samples"]["voice_profile"]
+
+    def test_document_build_takes_top_samples_in_turn_per_document(self):
+        rows = self.real_run_index(dict.fromkeys(self.PROSE, 10))
+        for mode in ("writing", "brand"):
+            with self.subTest(mode=mode):
+                api = self.build("--source-type", mode, "--top", "15", senders=())
+                top = self.voice_profile_files()
+                self.assertEqual(len(top), 15)
+                source = {r["file"]: r["source"] for r in rows}
+                counts = {s: sum(source[f] == s for f in top) for s in self.PROSE}
+                self.assertEqual(counts, dict.fromkeys(self.PROSE, 5))
+                # one from each document in turn, documents in sorted order
+                order = sorted(self.PROSE)
+                self.assertEqual([source[f] for f in top], order * 5)
+                body = api.calls("/analyze/voice-profile")[0]["body"]["texts"][0]
+                self.assertEqual(body, "\n\n".join(bp.body(self.samples / f) for f in top))
+
+    def test_three_documents_of_two_passages_give_all_six(self):
+        rows = self.real_run_index(dict.fromkeys(self.PROSE, 2))
+        self.build("--source-type", "writing", "--top", "15", senders=())
+        top = self.voice_profile_files()
+        self.assertEqual(sorted(top), sorted(r["file"] for r in rows))
+        self.assertEqual(len({r["source"] for r in rows if r["file"] in top[:3]}), 3)
+
+    def test_within_a_document_the_order_is_score_then_words(self):
+        write_samples(self.samples, [
+            {"file": "a_long_low.md", "words": 900, "verdict": "KEEP", "score": 3,
+             "source": "a.md", "text": "A long low."},
+            {"file": "a_short_high.md", "words": 100, "verdict": "KEEP", "score": 5,
+             "source": "a.md", "text": "A short high."},
+            {"file": "a_long_high.md", "words": 200, "verdict": "KEEP", "score": 5,
+             "source": "a.md", "text": "A long high."},
+            {"file": "b_one.md", "words": 50, "verdict": "KEEP", "score": 1,
+             "source": "b.md", "text": "B one."},
+        ])
+        self.build("--source-type", "brand", senders=())
+        self.assertEqual(self.voice_profile_files(),
+                         ["a_long_high.md", "b_one.md", "a_short_high.md", "a_long_low.md"])
+
+    def test_document_build_without_a_source_column_keeps_todays_order(self):
+        self.reviewed_samples()  # no source column
+        self.build("--source-type", "writing", senders=())
+        self.assertEqual(self.voice_profile_files(), ["c.md", "a.md", "d.md"])
+
+    def test_email_build_with_a_source_column_keeps_todays_order(self):
+        self.real_run_index(dict.fromkeys(self.PROSE, 10))
+        self.build("--source-type", "email", "--top", "15")
+        top = self.voice_profile_files()
+        self.assertEqual(top, [f"d0_{i:02d}.md" for i in range(10)]
+                         + [f"d1_{i:02d}.md" for i in range(5)])
+
+    # Honest build output (Epic 19 T6, bugs 7 and 8).
+
+    NO_REFERENCE = "no reference set"
+
+    def test_document_build_says_there_is_no_reference_set(self):
+        self.document_samples()
+        self.build("--source-type", "writing", senders=())
+        line = [l for l in self.stdout.splitlines() if self.NO_REFERENCE in l]
+        self.assertEqual(len(line), 1)
+        self.assertIn("baseline", line[0])
+        self.assertIn("Stats reference", line[0])
+
+    def test_email_build_without_reference_says_so_and_with_one_does_not(self):
+        self.reviewed_samples()
+        self.build()
+        self.assertIn(self.NO_REFERENCE, self.stdout)
+        self.out.unlink()
+        self.build("--reference", str(self.reference_set(2)))
+        self.assertTrue(self.out.exists())
+        self.assertNotIn(self.NO_REFERENCE, self.stdout)
+
+    def test_check_and_estimate_do_not_print_the_no_reference_line(self):
+        self.reviewed_samples()
+        self.build("--check", author=())
+        self.assertNotIn(self.NO_REFERENCE, self.stdout)
+        self.build("--estimate", key=(), author=())
+        self.assertNotIn(self.NO_REFERENCE, self.stdout)
+
+    def test_help_does_not_recommend_reference_for_documents(self):
+        out = io.StringIO()
+        with self.assertRaises(SystemExit), mock.patch.object(bp.sys, "argv", ["bp", "--help"]), \
+                contextlib.redirect_stdout(out):
+            bp.main()
+        text = " ".join(out.getvalue().split())
+        self.assertNotIn("(recommended)", text)
+        self.assertIn("documents have no reference set", text)
+        self.assertIn("default: none", text)
+        self.assertIn("extract-documents.py", text)
+
+    def test_one_document_is_singular_in_the_profile(self):
+        write_samples(self.samples, [
+            {"file": "a_01.md", "words": 300, "verdict": "KEEP", "score": 5,
+             "source": "posts/a.md", "text": "Passage A one."},
+        ])
+        self.build("--source-type", "writing", senders=())
+        self.assertEqual(json.loads(self.out.read_text())["meta"]["source"],
+                         "writing samples (1 document), reviewed passages")
+        self.build("--source-type", "brand", senders=())
+        self.assertEqual(json.loads(self.out.read_text())["meta"]["source"],
+                         "brand documents (1 document, several authors), reviewed passages")
 
     def test_build_without_author_or_check_is_refused_before_any_request(self):
         self.reviewed_samples()
