@@ -20,9 +20,12 @@ documents (extract-documents.py), writing and brand turn the email rules off:
 quoted, forwarded and header lines, unsubscribe boilerplate, and sign-off names.
 writing drops a passage whose first or
 last line is a byline ("By <Name>") naming someone other than --author; brand
-keeps every author. Both print a coverage: line (KEEP passages, and the distinct
-source values among them) and exit with status 3 below the floor in FLOORS, after
-index.csv is written so the verdicts can be read.
+keeps every author. Both also drop quoted model output (a lead-in naming a model,
+a prompt or a response, then the answer; or mostly code-like lines) and table
+text (mostly short lines, many of them numbers). Both print a coverage: line (KEEP
+passages, and the distinct source values among them), warn below the minimum in
+MINIMUMS, and exit with status 3 below the floor in FLOORS, after index.csv is
+written so the verdicts can be read.
 
 index.csv is replaced only after every sample was judged, so a failed run
 leaves it as it was. A rerun reviews every sample again.
@@ -42,7 +45,8 @@ COLUMNS = ["verdict", "score", "reason"]
 KEEP_REASON = "own writing"
 REASONS = [KEEP_REASON, "broken extraction", "quoted or forwarded text",
            "list, table, code or log", "form letter", "not in the author's language",
-           "written in another name", "written by someone else"]
+           "written in another name", "written by someone else", "quoted model output",
+           "table or numbers"]
 
 MODES = ["email", "writing", "brand"]
 # Per document mode: (KEEP passages, distinct documents). Below the floor the build
@@ -136,6 +140,25 @@ CONTACT_ITEM = re.compile(
 CONTACT_EXTRA_WORDS = 3
 WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?")
 
+# Quoted model output (writing and brand). A lead-in is a short line that either ends in
+# ":" and names a model or a prompt ("Here is what ChatGPT said:"), or is a heading whose
+# last word is RESPONSE_WORDS after a capitalised name ("AI21 Studio Response").
+MODEL_WORDS = re.compile(
+    r"\b(chatgpt|claude|gpt[\w.-]*|gemini|llms?|the model|the prompt|prompt|output|"
+    r"response|answer)\b", re.I)
+RESPONSE_WORDS = frozenset("response output answer reply completion".split())
+LEAD_IN_WORDS = 8  # a longer line ending in ":" is a sentence, not a lead-in
+# After a "...:" lead-in, this many short lines without sentence punctuation are a quoted block.
+SHORT_BLOCK = 3
+SHORT_LINE_WORDS = 6
+SENTENCE_END = re.compile(r"[.!?][\"'\u201d)*_]*$")
+CODE_TOKEN = re.compile(r"^\s*(\$(?!\d)|>>>|\{|\[|import\b|def\b|curl\b)")
+# Table text: share of lines with TABLE_CELL_WORDS words or fewer, and of mostly-digit lines.
+TABLE_CELL_WORDS = 3
+TABLE_SHORT_SHARE = 0.4
+TABLE_DIGIT_SHARE = 0.25
+MIN_TABLE_LINES = 4
+
 
 def body(path: Path) -> str:
     return path.read_text(encoding="utf-8").partition("\n")[2].strip()
@@ -200,6 +223,49 @@ def is_structured(text: str) -> bool:
     lines = lines_of(text)
     n = sum(1 for l in lines if BULLET.search(l) or TABLE.search(l) or CODE.search(l) or LOG.search(l))
     return n >= 2 and n / len(lines) >= MOSTLY
+
+
+def is_lead_in(line: str) -> bool:
+    """A short line that introduces a model's answer (see MODEL_WORDS)."""
+    line = line.strip().strip("#*_ ").strip()
+    toks = line.split()
+    if not toks or len(toks) > LEAD_IN_WORDS:
+        return False
+    if line.endswith(":"):
+        return bool(MODEL_WORDS.search(line))
+    *name, last = toks
+    return (last.lower() in RESPONSE_WORDS and bool(name)
+            and all(t[0].isupper() and t.lower() not in FUNCTION_WORDS for t in name))
+
+
+def is_model_output(text: str) -> bool:
+    """Quoted model output: after a lead-in, the answer is most of the passage; or a
+    "...:" lead-in followed by a block of short lines; or mostly code-like lines."""
+    lines = lines_of(text)
+    total = len(text.split())
+    if sum(len(l.split()) for l in lines if CODE_TOKEN.search(l)) > total * MOSTLY:
+        return True
+    for k, line in enumerate(lines):
+        if not is_lead_in(line):
+            continue
+        if sum(len(l.split()) for l in lines[k + 1:]) > total * MOSTLY:
+            return True
+        block = lines[k + 1:k + 1 + SHORT_BLOCK]
+        if (line.rstrip("*_ ").endswith(":") and len(block) == SHORT_BLOCK
+                and all(len(l.split()) <= SHORT_LINE_WORDS and not SENTENCE_END.search(l.strip())
+                        for l in block)):
+            return True
+    return False
+
+
+def is_table(text: str) -> bool:
+    """One cell per line: mostly short lines, and many of them numbers."""
+    lines = lines_of(text)
+    if len(lines) < MIN_TABLE_LINES:
+        return False
+    short = share(lines, lambda l: len(l.split()) <= TABLE_CELL_WORDS)
+    digits = share(lines, lambda l: sum(c.isdigit() for c in l) > len(l.replace(" ", "")) / 2)
+    return short > TABLE_SHORT_SHARE and digits >= TABLE_DIGIT_SHARE
 
 
 def shingles(text: str) -> set[int]:
@@ -337,6 +403,10 @@ def review(texts: list[str], author: str = "", mode: str = "email") -> list[dict
             reason = "quoted or forwarded text"
         elif is_structured(t):
             reason = "list, table, code or log"
+        elif not email and is_table(t):
+            reason = "table or numbers"
+        elif not email and is_model_output(t):
+            reason = "quoted model output"
         elif is_garbled(t):
             reason = "broken extraction"
         elif i in dups:
@@ -404,7 +474,7 @@ def documents(rows: list[dict], verdicts: list[dict]) -> int:
 
 def check_coverage(mode: str, keep: int, docs: int) -> None:
     """Print the coverage: line; exit FLOOR_EXIT below the mode's floor."""
-    print(f"coverage: {keep} KEEP passages from {docs} documents")
+    print(f"coverage: {keep} KEEP passages from {docs} document{'' if docs == 1 else 's'}")
     (floor, floor_docs), (least, least_docs) = FLOORS[mode], MINIMUMS[mode]
     if keep < floor or docs < floor_docs:
         need = f"{floor} KEEP passages" + (f" from {floor_docs} documents" if floor_docs else "")

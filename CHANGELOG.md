@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - README: the opt-in reference set is up to 148 emails from other senders, not 200; it is extracted with the same `--max-samples` cap as your samples. `test_readme_claims.py` pins the count to the script's default.
+- `review-samples.py --mode writing|brand` drops quoted AI model output (reason `quoted model output`: a short lead-in such as "AI21 Studio Response" or "Here is what ChatGPT said:" followed by the answer, or mostly code-like lines) and one-cell-per-line table text (reason `table or numbers`). In a real run, model answers quoted in a PDF and a DOCX were kept as the author's own writing and uploaded. Email mode is unchanged.
+- `review-samples.py`: the `coverage:` line says "1 document", not "1 documents".
 - `.claude-plugin/plugin.json`: the description says `--build` builds a voice from an email export, a folder of your own writing, or a folder of brand documents, not from an email export only. `test_plugin_manifest.py` pins the three sources.
 
 ## [0.3.0] - 2026-11-20
