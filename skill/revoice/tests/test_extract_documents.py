@@ -1,3 +1,4 @@
+import collections
 import csv
 import email.message
 import io
@@ -71,7 +72,16 @@ class Run:
         return (self.out / self.by_source[source]["file"]).read_text(encoding="utf-8")
 
 
+def prose(words: int, tag: str) -> str:
+    """``words`` words no other tag shares, with a sentence end every 10 words."""
+    return " ".join(f"{tag}-{i}" + ("." if i % 10 == 9 or i == words - 1 else "")
+                    for i in range(words))
+
+
 class Base(unittest.TestCase):
+    # The reader tests use one-line documents; the passage rules have their own tests.
+    ARGS = ("--min-words", "1")
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -97,7 +107,7 @@ class Base(unittest.TestCase):
         return path
 
     def run_script(self, *args) -> Run:
-        _, stdout = run_main(ed, *map(str, args), "-o", str(self.out))
+        _, stdout = run_main(ed, *map(str, args), *self.ARGS, "-o", str(self.out))
         return Run(self.out, stdout)
 
     def pdftotext_stub(self, body: str) -> str:
@@ -201,7 +211,8 @@ class DocxReaderTest(Base):
                                                   table="TABLE-TEXT", headings=["Our voice"]))
         run = self.run_script(self.docs)
         row = run.by_source["Brand Guide.docx"]
-        self.assertEqual((row["subject"], row["date"], row["words"]), ("Brand Guide", "undated", "9"))
+        # A heading is not prose, so "Our voice" is not counted.
+        self.assertEqual((row["subject"], row["date"], row["words"]), ("Brand Guide", "undated", "7"))
         self.assertEqual(run.text("Brand Guide.docx"),
                          "# Brand Guide\n\n# Our voice\n\nWe write plainly.\n\nWe keep it short.\n")
 
@@ -465,7 +476,9 @@ class UrlTest(Base):
         self.assertIsNotNone(handler.redirect_request(req, None, 302, "Found", {}, "https://example.com/b"))
 
     def test_at_most_max_urls_are_fetched(self):
-        self.opener.side_effect = lambda req, timeout: FakeResponse(b"<p>Hi.</p>", req.full_url)
+        # A different page each time: two same pages would be one passage.
+        self.opener.side_effect = lambda req, timeout: FakeResponse(
+            f"<p>Hi from {req.full_url}.</p>".encode(), req.full_url)
         with mock.patch.object(ed, "MAX_URLS", 2):
             run = self.run_script("--urls", self.urls(*[f"https://example.com/{i}" for i in range(4)]))
         self.assertEqual(self.opener.call_count, 2)
@@ -521,6 +534,286 @@ class OutputTest(Base):
         proc = subprocess.run([sys.executable, str(SCRIPT), "--help"], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0)
         self.assertIn("--urls", proc.stdout)
+
+
+class PassageBase(Base):
+    ARGS = ()
+
+    def samples(self, run: Run) -> list[str]:
+        return [(self.out / r["file"]).read_text(encoding="utf-8") for r in run.rows]
+
+    def all_text(self, run: Run) -> str:
+        return "\n".join(self.samples(run))
+
+    def body_words(self, run: Run, row) -> int:
+        """Prose words in a sample: neither the title line nor a heading is counted."""
+        text = (self.out / row["file"]).read_text(encoding="utf-8")
+        paragraphs = text.split("\n\n")[1:]
+        return sum(len(p.split()) for p in paragraphs if not p.startswith("#"))
+
+
+class BoilerplateTest(PassageBase):
+    TAGLINE = "Acme Widgets: making widgets simple since 1999."
+
+    def test_code_tables_nav_footer_legal_and_a_repeated_tagline_never_reach_a_sample(self):
+        self.write("a.md", f"# Garden notes\n\n{prose(200, 'a1')}\n\n```python\nCODE-ONE = 1\n\nCODE-TWO = 2\n```\n\n"
+                           f"| Plant | TABLE-HEAD |\n|---|---|\n| peas | TABLE-CELL |\n\n{prose(200, 'a2')}\n\n"
+                           f"© 2019 Acme LEGAL-TEXT\n\n{self.TAGLINE}\n")
+        self.write("b.txt", f"{prose(300, 'b1')}\n\nAll rights reserved RESERVED-TEXT.\n\n{self.TAGLINE}\n")
+        self.write("c.html", f"<nav>NAV-TEXT</nav><header>HEADER-TEXT</header><p>{prose(300, 'c1')}</p>"
+                             f"<p>{self.TAGLINE}</p><footer>FOOTER-TEXT © 2019</footer>")
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(run.by_source), ["a.md", "b.txt", "c.html"])
+        text = self.all_text(run)
+        for marker in ("CODE-", "TABLE-", "NAV-TEXT", "HEADER-TEXT", "FOOTER-TEXT", "LEGAL-TEXT",
+                       "RESERVED-TEXT", "©", "making widgets simple", "```", "|"):
+            self.assertNotIn(marker, text)
+        self.assertIn(prose(200, "a2"), text)
+        self.assertRegex(run.stdout, r"repeated line\s*: 3")
+        self.assertIn(self.TAGLINE, run.stdout)
+
+    def test_a_tagline_in_only_two_documents_is_kept(self):
+        self.write("a.md", f"{prose(200, 'a1')}\n\n{self.TAGLINE}\n")
+        self.write("b.md", f"{prose(200, 'b1')}\n\n{self.TAGLINE}\n")
+        run = self.run_script(self.docs)
+        self.assertIn(self.TAGLINE, run.text("a.md"))
+        self.assertIn(self.TAGLINE, run.text("b.md"))
+
+    def test_a_line_repeated_in_the_middle_of_documents_is_not_a_running_line(self):
+        for i in range(3):
+            tail = "\n\n".join(prose(10, f"d{i}t{j}") for j in range(6))
+            self.write(f"d{i}.md", "\n\n".join(prose(10, f"d{i}h{j}") for j in range(6))
+                       + f"\n\n{prose(150, f'd{i}x')}\n\nSee the chart below.\n\n{prose(150, f'd{i}y')}\n\n{tail}\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(len(run.rows), 3)
+        for row in run.rows:
+            self.assertIn("See the chart below.", run.text(row["source"]))
+
+    def test_line_rules_drop_page_numbers_contents_links_images_and_indented_code(self):
+        self.write("doc.md", f"Contents ........ 3\n\n{prose(200, 'p1')}\n\nPage 3 of 12\n\n"
+                             f"![a chart](chart.png)\n\n- [Home](/) | [About](/about)\n\nhttps://example.com/x\n\n"
+                             f"    INDENTED-CODE = 1\n    more = 2\n\n{prose(100, 'p2')}\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(run.text("doc.md"), f"# doc\n\n{prose(200, 'p1')}\n\n{prose(100, 'p2')}\n")
+        self.assertRegex(run.stdout, r"code\s*: 2")
+        self.assertRegex(run.stdout, r"page number\s*: 1")
+        self.assertRegex(run.stdout, r"contents line\s*: 1")
+        self.assertRegex(run.stdout, r"link or image\s*: 3")
+
+    def test_prose_that_mentions_cookies_or_starts_indented_in_a_text_file_is_kept(self):
+        long_para = f"My grandmother kept her cookie recipe in a tin. {prose(150, 'c1')}"
+        self.write("doc.txt", f"    {prose(100, 'i1')}\n\n{long_para}\n")
+        run = self.run_script(self.docs)
+        self.assertIn(long_para, run.text("doc.txt"))
+        self.assertIn(prose(100, "i1"), run.text("doc.txt"))
+
+    def test_an_unclosed_fence_drops_the_rest_of_the_document(self):
+        self.write("doc.md", f"{prose(200, 'k1')}\n\n```\nCODE-A\n\n{prose(100, 'k2')}\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(run.text("doc.md"), f"# doc\n\n{prose(200, 'k1')}\n")
+
+    def test_a_document_that_is_80_percent_boilerplate_is_dropped_whole(self):
+        links = "\n".join(f"- [Our page number {i}](/p{i})" for i in range(40))  # 40 x 5 words
+        legal = ("We use cookies to give you the best experience on our site. By continuing to browse "
+                 "you agree to our cookie policy and our terms of use for this site.")  # 30 words
+        chrome = f"{links}\n\n" + "\n\n".join([legal] * 6) + "\n\n\u00a9 2020 Acme Inc. All rights reserved.\n"
+        self.write("chrome.md", f"{prose(100, 'm1')}\n\n{chrome}")  # 100 of 506 words are prose
+        few_links = "\n".join(links.split("\n")[:10])
+        self.write("fine.md", f"{prose(260, 'f1')}\n\n{legal}\n\n{few_links}\n")  # 80 of 340 words
+        run = self.run_script(self.docs)
+        self.assertEqual(list(run.by_source), ["fine.md"])
+        self.assertEqual(run.text("fine.md"), f"# fine\n\n{prose(260, 'f1')}\n")
+        self.assertIn("skip chrome.md: mostly boilerplate", run.stdout)
+        self.assertRegex(run.stdout, r"mostly boilerplate\s*: 1")
+        self.assertRegex(run.stdout, r"legal or site chrome\s*: 8")
+        self.assertRegex(run.stdout, r"link or image\s*: 50")
+
+    def test_a_document_with_a_long_code_block_and_real_prose_is_kept(self):
+        code = "\n".join(f"line_{i} = {i}" for i in range(40))
+        self.write("tech.md", f"{prose(120, 't1')}\n\n```\n{code}\n```\n\n{prose(120, 't2')}\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(run.text("tech.md"), f"# tech\n\n{prose(120, 't1')}\n\n{prose(120, 't2')}\n")
+
+
+class PassageTest(PassageBase):
+    def test_an_1800_word_document_gives_passages_of_150_to_500_words_with_no_paragraph_cut(self):
+        sizes = [40, 120, 90, 60, 140, 75, 110, 55, 130, 95, 85, 65, 135, 100, 80, 70, 125, 125]
+        self.assertEqual(sum(sizes), 1800)
+        paragraphs = [prose(n, f"q{i}") for i, n in enumerate(sizes)]
+        self.write("long.md", "\n\n".join(paragraphs) + "\n")
+        run = self.run_script(self.docs)
+        self.assertGreater(len(run.rows), 3)
+        seen = []
+        for row in run.rows:
+            self.assertTrue(150 <= int(row["words"]) <= 500, row)
+            self.assertEqual(int(row["words"]), self.body_words(run, row))
+            body = (self.out / row["file"]).read_text(encoding="utf-8").split("\n\n")[1:]
+            seen += [p.strip() for p in body]
+        self.assertEqual(sorted(seen), sorted(paragraphs))
+        names = sorted(r["file"] for r in run.rows)
+        self.assertEqual([n.split("_")[1] for n in names], [f"{i:02d}" for i in range(1, len(names) + 1)])
+
+    def test_the_tail_is_merged_into_the_previous_passage_up_to_500_words(self):
+        self.write("doc.md", "\n\n".join(prose(n, f"r{i}") for i, n in enumerate([350, 350, 400, 50, 50])))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(int(r["words"]) for r in run.rows), [350, 350, 500])
+        self.assertNotRegex(run.stdout, r"too short")
+
+    def test_a_tail_that_would_make_the_passage_over_500_words_is_dropped_as_too_short(self):
+        self.write("doc.md", "\n\n".join(prose(n, f"s{i}") for i, n in enumerate([300, 350, 450, 50, 50])))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(int(r["words"]) for r in run.rows), [300, 350, 450])
+        self.assertNotIn(prose(50, "s3"), self.all_text(run))
+        self.assertRegex(run.stdout, r"too short\s*: 1")
+
+    def test_a_short_passage_in_the_middle_joins_the_previous_one_when_it_fits(self):
+        self.write("fits.md", "\n\n".join(prose(n, f"u{i}") for i, n in enumerate([350, 100, 450])))
+        self.write("over.md", "\n\n".join(prose(n, f"z{i}") for i, n in enumerate([480, 100, 450])))
+        run = self.run_script(self.docs)
+        words = collections.defaultdict(list)
+        for r in run.rows:
+            words[r["source"]].append(int(r["words"]))
+        self.assertEqual({k: sorted(v) for k, v in words.items()}, {"fits.md": [450, 450], "over.md": [450, 480]})
+        self.assertRegex(run.stdout, r"too short\s*: 1")
+
+    def test_a_short_document_is_kept_whole_from_60_words(self):
+        self.write("short.md", prose(60, "v1"))
+        self.write("tiny.md", prose(59, "v2"))
+        run = self.run_script(self.docs)
+        self.assertEqual(list(run.by_source), ["short.md"])
+        self.assertRegex(run.stdout, r"too short\s*: 1")
+
+    def test_min_words_sets_the_shortest_passage(self):
+        self.write("doc.md", "\n\n".join(prose(n, f"w{i}") for i, n in enumerate([400, 400, 120])))
+        run = self.run_script(self.docs, "--min-words", "100")
+        self.assertEqual(sorted(int(r["words"]) for r in run.rows), [120, 400, 400])
+        self.out = self.tmp / "samples2"
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(int(r["words"]) for r in run.rows), [400, 400])
+
+    def test_one_paragraph_over_500_words_is_split_at_sentence_ends(self):
+        para = prose(1200, "x1")
+        self.write("wall.txt", para)
+        run = self.run_script(self.docs)
+        pieces = [(self.out / r["file"]).read_text(encoding="utf-8").split("\n\n", 1)[1].strip()
+                  for r in sorted(run.rows, key=lambda r: r["file"])]
+        self.assertGreaterEqual(len(pieces), 3)
+        for piece in pieces:
+            self.assertTrue(150 <= len(piece.split()) <= 500, len(piece.split()))
+            self.assertTrue(piece.endswith("."))
+        self.assertEqual(sorted(" ".join(pieces).split()), sorted(para.split()))
+
+    def test_a_sentence_over_500_words_is_cut_at_500(self):
+        self.write("blob.txt", " ".join(f"y{i}" for i in range(1100)))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(int(r["words"]) for r in run.rows), [500, 500])
+        self.assertRegex(run.stdout, r"too short\s*: 1")
+
+    def test_a_heading_stays_only_as_the_first_line_and_is_not_counted(self):
+        self.write("doc.md", f"# Part one\n\n{prose(360, 'h1')}\n\n## Part two\nPart two is next\n\n"
+                             f"{prose(200, 'h2')}\n\n## Aside\n\n{prose(100, 'h3')}\n\n# Trailing heading\n")
+        run = self.run_script(self.docs)
+        texts = sorted(self.samples(run))
+        self.assertEqual(texts, [f"# doc\n\n# Part one\n\n{prose(360, 'h1')}\n",
+                                 f"# doc\n\n## Part two\n\nPart two is next\n\n{prose(200, 'h2')}\n\n"
+                                 f"{prose(100, 'h3')}\n"])
+        self.assertEqual(sorted(int(r["words"]) for r in run.rows), [304, 360])
+
+    def test_a_document_of_headings_only_has_no_text(self):
+        self.write("heads.md", "# One\n\n## Two\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(run.rows, [])
+        self.assertRegex(run.stdout, r"no text\s*: 1")
+
+
+class DedupeAndCapTest(PassageBase):
+    def test_two_copies_of_one_article_give_one_set_of_passages(self):
+        article = "\n\n".join(prose(n, f"art{i}") for i, n in enumerate([300, 200, 350, 250]))
+        self.write("post.md", f"---\ntitle: The Post\ndate: 2018-03-01\n---\n{article}\n")
+        self.write("post.txt", article + "\n")
+        run = self.run_script(self.docs)
+        self.assertEqual({r["source"] for r in run.rows}, {"post.md"})
+        self.assertEqual(len(run.rows), 3)
+        self.assertRegex(run.stdout, r"duplicate\s*: 3")
+
+    def test_a_passage_sharing_half_its_5_grams_with_a_longer_one_is_a_duplicate(self):
+        base = prose(300, "dup")
+        self.write("a.md", base)
+        self.write("b.md", " ".join(base.split()[:160]) + " " + prose(100, "other"))
+        self.write("c.md", " ".join(base.split()[:120]) + " " + prose(180, "third"))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(run.by_source), ["a.md", "c.md"])
+        self.assertRegex(run.stdout, r"duplicate\s*: 1")
+
+    def test_200_passages_across_10_documents_keep_148_and_every_document(self):
+        # One document is far longer and its passages are longer, so taking
+        # the longest first would leave the other nine out.
+        self.write("big.md", "\n\n".join(prose(400, f"big{i}") for i in range(155)))
+        for d in range(9):
+            self.write(f"small{d}.md", "\n\n".join(prose(350, f"s{d}p{i}") for i in range(5)))
+        run = self.run_script(self.docs)
+        self.assertEqual(len(run.rows), 148)
+        counts = collections.Counter(r["source"] for r in run.rows)
+        self.assertEqual(len(counts), 10)
+        for d in range(9):
+            self.assertEqual(counts[f"small{d}.md"], 5)
+        self.assertRegex(run.stdout, r"over the cap\s*: 52")
+
+    def test_max_samples_sets_the_cap_and_0_means_no_cap(self):
+        for d in range(3):
+            self.write(f"d{d}.md", "\n\n".join(prose(350, f"m{d}p{i}") for i in range(3)))
+        run = self.run_script(self.docs, "--max-samples", "4")
+        self.assertEqual(len(run.rows), 4)
+        self.assertEqual(len({r["source"] for r in run.rows}), 3)
+        self.out = self.tmp / "all"
+        run = self.run_script(self.docs, "--max-samples", "0")
+        self.assertEqual(len(run.rows), 9)
+
+    def test_default_cap_and_passage_sizes_match_the_plan(self):
+        es = load(BUILD / "extract-samples.py", "extract_samples_for_docs")
+        self.assertEqual(ed.MAX_SAMPLES, es.MAX_SAMPLES)
+        self.assertEqual((ed.MIN_WORDS, ed.TARGET_WORDS, ed.MAX_WORDS, ed.SHORT_DOC_WORDS),
+                         (150, 350, 500, 60))
+
+    def test_output_is_identical_when_the_input_files_are_given_in_reverse_order(self):
+        tagline = "Read the whole series at example.com."
+        paths = []
+        for d in range(6):
+            body = "\n\n".join(prose(350, f"o{d}p{i}") for i in range(3))
+            paths.append(self.write(f"doc{d}.md", f"{body}\n\n{tagline}\n"))
+        same = prose(350, "same") + "\n"
+        paths.append(self.write("copy-a.txt", same))
+        paths.append(self.write("copy-b.md", same))
+
+        def snapshot(name, args):
+            self.out = self.tmp / name
+            self.run_script(*args, "--max-samples", "10")
+            return {p.name: p.read_bytes() for p in sorted(self.out.iterdir())}
+
+        forward = snapshot("forward", paths)
+        backward = snapshot("backward", paths[::-1])
+        self.assertEqual(len(forward), 11)
+        self.assertEqual(forward, backward)
+
+
+class BeforeTest(PassageBase):
+    def test_before_drops_a_later_document_and_keeps_an_undated_one_with_the_count(self):
+        self.write("old.md", f"---\ndate: 2019-05-01\n---\n{prose(200, 'old')}\n")
+        self.write("new.md", f"---\ndate: 2023-01-02\n---\n{prose(200, 'new')}\n")
+        self.write("cut.md", f"---\ndate: 2022-11-30\n---\n{prose(200, 'cut')}\n")
+        self.write("nodate.md", prose(200, "nodate"))
+        run = self.run_script(self.docs, "--before", "2022-11-30")
+        self.assertEqual(sorted(run.by_source), ["nodate.md", "old.md"])
+        self.assertEqual(run.by_source["nodate.md"]["date"], "undated")
+        self.assertIn("skip new.md: on or after --before", run.stdout)
+        self.assertRegex(run.stdout, r"on or after --before\s*: 2")
+        self.assertIn("kept 1 undated document", run.stdout)
+
+    def test_a_bad_before_date_is_a_plain_error(self):
+        err = io.StringIO()
+        with self.assertRaises(SystemExit), mock.patch.object(sys, "stderr", err):
+            run_main(ed, str(self.docs), "--before", "May 2020", "-o", str(self.out))
+        self.assertIn("YYYY-MM-DD", err.getvalue())
 
 
 if __name__ == "__main__":
