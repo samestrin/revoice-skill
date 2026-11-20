@@ -108,6 +108,18 @@ class CheckFormatTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out, "")
 
+    def test_other_fence_marker_inside_fence_stays_code(self):
+        # a ~~~ line inside a ``` fence does not close it
+        text = "```\n~~~\n" + "\n".join(WRAPPED) + "\n```\n"
+        code, out = self.run_check(text)
+        self.assertEqual(code, 0)
+        self.assertEqual(out, "")
+
+    def test_fence_with_info_string(self):
+        code, out = self.run_check("```text\n" + "\n".join(WRAPPED) + "\n```\n")
+        self.assertEqual(code, 0)
+        self.assertEqual(out, "")
+
     def test_wrap_after_closed_fence_is_still_flagged(self):
         text = "```\ncode\n```\n\n" + "\n".join(WRAPPED) + "\n"
         code, out = self.run_check(text)
@@ -145,7 +157,8 @@ class CheckFormatTest(unittest.TestCase):
         self.assertEqual(code, 1)
         n = len(WRAPPED)
         expected = "".join(f"HARD-WRAP line {i}\n" for i in range(2, n + 1))
-        expected += "".join(f"HARD-WRAP line {n + 2 + i}\n" for i in range(2, n + 1))
+        # blank line at n + 1; second paragraph starts at n + 2
+        expected += "".join(f"HARD-WRAP line {n + 1 + i}\n" for i in range(2, n + 1))
         self.assertEqual(out, expected)
 
     def test_empty_file_passes(self):
@@ -157,6 +170,15 @@ class CheckFormatTest(unittest.TestCase):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             code, out = run_main(cf, "--rewrite", str(Path(self.tmp.name) / "nope.txt"))
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertEqual(len(err.getvalue().splitlines()), 1)
+
+    def test_undecodable_file_exits_2(self):
+        self.file.write_bytes(b"caf\xe9 and more\nlowercase line\n")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code, out = run_main(cf, "--rewrite", str(self.file))
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
         self.assertEqual(len(err.getvalue().splitlines()), 1)
