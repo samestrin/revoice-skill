@@ -16,9 +16,30 @@ and the pages listed in --urls:
                 as HTML (or as text for a text/plain page); "#" lines are
                 comments. Use it only for pages you own.
 
-Anything else is skipped and counted. Each document is written whole as
-``# <title>`` followed by its text, and index.csv lists every sample with the
-columns file, date, words, subject, source.
+Anything else is skipped and counted. Then:
+
+  - boilerplate is dropped: markdown code (fenced or indented), pipe tables,
+    image-only and link-only lines, page numbers, contents lines with dotted
+    leaders, short legal and site-chrome paragraphs ("\u00a9", "all rights
+    reserved", "privacy policy", "cookie", "subscribe to", ...), and any line
+    of at most 80 characters among the first or last 6 lines of 3 or more
+    documents (a running header, footer or tagline), which is removed
+    everywhere. A document that is mostly such lines is dropped whole
+  - with --before, a document whose front matter date is on or after it is
+    dropped; undated documents are kept and counted
+  - each document is split into passages of about 350 words (150 to 500,
+    --min-words sets the 150) without cutting a paragraph; a paragraph over
+    500 words is split at sentence ends. A short last passage joins the one
+    before it when that stays within 500 words, or is dropped as too short. A
+    document under --min-words words is kept whole from 60 words
+  - a passage that shares half its word 5-grams with a longer one, in any
+    document, is a duplicate
+  - at most --max-samples (default 148) are kept, round-robin across
+    documents: each document's longest passage first, then the second, ...
+
+Each passage is written as ``# <title>`` followed by its text, and index.csv
+lists every sample with the columns file, date, words, subject, source. The
+same inputs in any order give the same output.
 """
 from __future__ import annotations
 import argparse
@@ -56,6 +77,35 @@ READERS = {".md": "text", ".txt": "text", ".html": "html", ".htm": "html",
            ".docx": "docx", ".pdf": "pdf"}
 NO_PDFTOTEXT = ("no pdftotext: to read a PDF, install poppler (it provides pdftotext), "
                 "or open the PDF and save it as .docx or .txt")
+
+# A default build of N samples costs 1 + N + min(N, 100) credits, as for
+# email (extract-samples.py): 148 makes 250, the free credits of a new key.
+MAX_SAMPLES = 148
+MIN_WORDS = 150
+TARGET_WORDS = 350
+MAX_WORDS = 500
+SHORT_DOC_WORDS = 60  # a document under MIN_WORDS is kept whole from here
+REPEAT_MIN_DOCS = 3
+REPEAT_MAX_CHARS = 80
+EDGE_LINES = 6
+CHROME_MAX_WORDS = 30  # a longer paragraph is prose that mentions a cookie
+MOSTLY_BOILERPLATE = 0.5
+DUPLICATE_SHARE = 0.5
+
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+HEADING = re.compile(r"^#{1,6}\s")
+INDENTED = re.compile(r"^(?: {4}|\t)")
+TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$")
+LINK = r"(?:!?\[[^\]]*\]\([^)]*\)|<?https?://\S+?>?)"
+LINK_ONLY = re.compile(rf"^\s*(?:[-*+\u2022]\s+)?{LINK}(?:\s*[|\u2022\u00b7,]?\s*{LINK})*\s*$")
+PAGE_NUMBER = re.compile(r"(?i)^[\s\-\u2013\u2014]*(?:page\s+)?\d{1,4}(?:\s*(?:of|/)\s*\d{1,4})?[\s\-\u2013\u2014]*$")
+CONTENTS = re.compile(r"(?:\.\s?){4,}\s*\d{1,4}\s*$")
+CHROME = re.compile(r"(?i)\u00a9|\ball rights reserved\b|\bterms (?:of|and) (?:use|service)\b|"
+                    r"\bprivacy policy\b|\bcookies?\b|\bsubscribe to\b|\bshare this\b|"
+                    r"\bread more\b|\bposted by\b.*\bon\b")
+LEGAL = re.compile(r"(?i)\u00a9|\ball rights reserved\b")  # dropped as a line, whatever the length
+SENTENCE_END = re.compile(r"[.!?][\"'\u201d\u2019)\]]*$")
 
 FRONT_MATTER = re.compile(r"\A---[ \t]*\n(.*?)^---[ \t]*$\n?", re.S | re.M)
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -368,13 +418,221 @@ def _key(text: str) -> str:
     return hashlib.sha1(" ".join(text.lower().split()).encode()).hexdigest()
 
 
-def _words(paragraphs: list[str]) -> int:
-    """Words of prose: a heading's "#" marker is not a word."""
-    return sum(len(p.lstrip("#").split()) for p in paragraphs)
-
-
 def _plural(n: int, word: str) -> str:
     return f"{n:,} {word}{'' if n == 1 else 's'}"
+
+
+def _norm(line: str) -> str:
+    return " ".join(line.lower().split())
+
+
+def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Counter):
+    """Drop code, tables and chrome; (blocks of lines kept, words of chrome dropped).
+
+    Code and tables are counted in ``counts`` but not as chrome: a post with a
+    long code sample is not "mostly boilerplate". A heading line becomes a
+    block of its own."""
+    blocks: list[list[str]] = []
+    chrome = 0
+    fence = None
+    for p in paragraphs:
+        lines = p.split("\n")
+        if fence is None and markdown and all(INDENTED.match(l) for l in lines):
+            counts["code"] += len(lines)
+            continue
+        if (fence is None and len(p.split()) <= CHROME_MAX_WORDS and CHROME.search(p)
+                and not HEADING.match(p) and not any(FENCE.match(l) for l in lines)):
+            counts["legal or site chrome"] += 1
+            chrome += len(p.split())
+            continue
+        table = any(TABLE_RULE.match(l) for l in lines)
+        block: list[str] = []
+        for line in lines:
+            m = FENCE.match(line)
+            if fence is not None:
+                counts["code"] += 1
+                if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) \
+                        and not line.strip().strip(fence[0]):
+                    fence = None
+                continue
+            if m:
+                fence = m.group(1)
+                counts["code"] += 1
+                continue
+            reason = ("table" if TABLE_ROW.match(line) or TABLE_RULE.match(line)
+                      or (table and "|" in line)
+                      else "link or image" if LINK_ONLY.match(line)
+                      else "page number" if PAGE_NUMBER.match(line)
+                      else "contents line" if CONTENTS.search(line)
+                      else "legal or site chrome" if LEGAL.search(line) else None)
+            if reason is None:
+                if HEADING.match(line):
+                    if block:
+                        blocks.append(block)
+                    blocks.append([line])
+                    block = []
+                else:
+                    block.append(line)
+                continue
+            counts[reason] += 1
+            if reason != "table":
+                chrome += len(line.split())
+        if block:
+            blocks.append(block)
+    return blocks, chrome
+
+
+def edge_lines(blocks: list[list[str]]) -> dict[str, str]:
+    """The short lines among a document's first and last EDGE_LINES lines, by
+    their lowercased words. Headings are not counted: "## Introduction" in
+    three posts is a section, not a tagline."""
+    lines = [l for b in blocks for l in b if l.strip() and not HEADING.match(l)]
+    edges = lines[:EDGE_LINES] + lines[-EDGE_LINES:]
+    return {_norm(l): l.strip() for l in edges if len(l.strip()) <= REPEAT_MAX_CHARS}
+
+
+def drop_lines(blocks: list[list[str]], repeated: set[str], counts: collections.Counter):
+    """Remove the repeated lines; (paragraphs left, words removed)."""
+    out, removed = [], 0
+    for block in blocks:
+        kept = []
+        for line in block:
+            if _norm(line) in repeated:
+                counts["repeated line"] += 1
+                removed += len(line.split())
+            else:
+                kept.append(line)
+        if any(l.strip() for l in kept):
+            out.append("\n".join(kept))
+    return out, removed
+
+
+def _prose_words(p: str) -> int:
+    return 0 if HEADING.match(p) else len(p.split())
+
+
+def split_paragraph(p: str) -> list[str]:
+    """A paragraph over MAX_WORDS, cut at sentence ends into pieces of about
+    TARGET_WORDS; a sentence over MAX_WORDS is cut every MAX_WORDS words."""
+    toks = p.split()
+    if len(toks) <= MAX_WORDS:
+        return [p]
+    sentences, cur = [], []
+    for t in toks:
+        cur.append(t)
+        if SENTENCE_END.search(t):
+            sentences.append(cur)
+            cur = []
+    if cur:
+        sentences.append(cur)
+    pieces, cur = [], []
+    for s in sentences:
+        while len(s) > MAX_WORDS:
+            if cur:
+                pieces.append(cur)
+                cur = []
+            pieces.append(s[:MAX_WORDS])
+            s = s[MAX_WORDS:]
+        if cur and (len(cur) >= TARGET_WORDS or len(cur) + len(s) > MAX_WORDS):
+            pieces.append(cur)
+            cur = []
+        cur = cur + s
+    if cur:
+        pieces.append(cur)
+    return [" ".join(x) for x in pieces]
+
+
+def passages(paragraphs: list[str], min_words: int):
+    """Split one document; ([(text, words)], number of passages too short).
+
+    Paragraphs are joined until a passage has TARGET_WORDS words, never past
+    MAX_WORDS. A heading stays only as the first line of a passage."""
+    units, heading = [], None  # (heading or None, text, words)
+    for p in paragraphs:
+        if HEADING.match(p):
+            heading = p
+            continue
+        for piece in split_paragraph(p):
+            units.append((heading, piece, len(piece.split())))
+            heading = None
+    groups, cur, n = [], [], 0
+    for u in units:
+        if cur and (n >= TARGET_WORDS or n + u[2] > MAX_WORDS):
+            groups.append(cur)
+            cur, n = [], 0
+        cur.append(u)
+        n += u[2]
+    if cur:
+        groups.append(cur)
+
+    def words(g):
+        return sum(u[2] for u in g)
+
+    short = 0
+    if len(groups) == 1:  # the whole document
+        keep = groups if words(groups[0]) >= min(SHORT_DOC_WORDS, min_words) else []
+        short = len(groups) - len(keep)
+    else:
+        keep = []
+        for g in groups:
+            if words(g) >= min_words:
+                keep.append(g)
+            elif keep and words(keep[-1]) + words(g) <= MAX_WORDS:
+                keep[-1] = keep[-1] + g
+            else:
+                short += 1
+    out = []
+    for g in keep:
+        parts = [g[0][0]] if g[0][0] else []
+        parts += [u[1] for u in g]
+        out.append(("\n\n".join(parts), words(g)))
+    return out, short
+
+
+def _grams(text: str) -> set:
+    toks = text.lower().split()
+    if len(toks) < 5:
+        return {tuple(toks)}
+    return {tuple(toks[i:i + 5]) for i in range(len(toks) - 4)}
+
+
+def _order(c: dict):
+    """Longest first; ties by sha1, then source, title, date and place, so the
+    order of the inputs never decides."""
+    return (-c["words"], c["key"], c["source"], c["title"], c["date"] or "", c["n"])
+
+
+def dedupe(items: list[dict]) -> tuple[list[dict], int]:
+    """Drop each passage that shares DUPLICATE_SHARE of its 5-grams with one
+    before it in _order."""
+    items = sorted(items, key=_order)
+    index: dict[tuple, list[int]] = collections.defaultdict(list)
+    kept_grams: list[set] = []
+    kept, dropped = [], 0
+    for c in items:
+        grams = _grams(c["text"])
+        hits = collections.Counter(k for g in grams for k in index.get(g, ()))
+        if any(h / max(1, min(len(grams), len(kept_grams[k]))) >= DUPLICATE_SHARE
+               for k, h in hits.items()):
+            dropped += 1
+            continue
+        for g in grams:
+            index[g].append(len(kept_grams))
+        kept_grams.append(grams)
+        kept.append(c)
+    return kept, dropped
+
+
+def cap(items: list[dict], max_samples: int) -> list[dict]:
+    """At most max_samples, round-robin across documents, longest first."""
+    by_doc: dict[tuple, list[dict]] = collections.defaultdict(list)
+    for c in items:
+        by_doc[c["source"], c["title"], c["date"] or ""].append(c)
+    lists = [sorted(v, key=_order) for v in by_doc.values()]
+    picked = []
+    for r in range(max((len(l) for l in lists), default=0)):
+        picked += sorted((l[r] for l in lists if r < len(l)), key=_order)
+    return picked[:max_samples] if max_samples else picked
 
 
 def main() -> None:
@@ -382,12 +640,27 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*", type=Path, help="files or folders to read")
     ap.add_argument("--urls", type=Path, help="a file with one http(s) URL per line")
+    ap.add_argument("--min-words", type=int, default=MIN_WORDS,
+                    help="the shortest passage kept (a shorter document is kept whole from 60 words)")
+    ap.add_argument("--max-samples", type=int, default=MAX_SAMPLES,
+                    help="keep at most this many passages, round-robin across documents (0 = no cap)")
+    ap.add_argument("--before", metavar="YYYY-MM-DD",
+                    help="drop documents whose front matter date is on or after this day")
     ap.add_argument("-o", "--out", type=Path, default=Path("samples"))
     args = ap.parse_args()
     if not args.paths and not args.urls:
         ap.error("give at least one file or folder, or --urls FILE")
     if args.urls and not args.urls.is_file():
         ap.error(f"--urls: no such file: {args.urls}")
+    for flag, value in (("--min-words", args.min_words), ("--max-samples", args.max_samples)):
+        if value < 0:
+            ap.error(f"{flag}: must be 0 or more")
+    before = None
+    if args.before:
+        try:
+            before = datetime.date.fromisoformat(args.before).isoformat()
+        except ValueError:
+            ap.error(f"--before: not a YYYY-MM-DD date: {args.before}")
     if hasattr(sys.stdout, "reconfigure"):  # not on a captured stream
         sys.stdout.reconfigure(errors="replace")  # non-ASCII titles on a Windows console
 
@@ -399,27 +672,65 @@ def main() -> None:
         except Skip as e:
             skipped.append((source, str(e)))
             continue
-        docs.append((title, date, paragraphs, source))
+        docs.append((title, date, paragraphs, source, path.suffix.lower() == ".md"))
     if args.urls:
         lines = [l.strip() for l in args.urls.read_text(encoding="utf-8-sig").splitlines()]
         lines = [l for l in lines if l and not l.startswith("#")]
-        docs.extend(read_urls(lines, skipped))
+        docs.extend((*d, False) for d in read_urls(lines, skipped))
+    n_read = len(docs)
+    if before:
+        for d in docs:
+            if d[1] and d[1] >= before:
+                skipped.append((d[3], "on or after --before"))
+        docs = [d for d in docs if not (d[1] and d[1] >= before)]
+
+    # Boilerplate: per document first, then the lines that open or close 3+ documents.
+    lines = collections.Counter()
+    stripped = []
+    for title, date, paragraphs, source, markdown in docs:
+        blocks, chrome = strip_markup(paragraphs, markdown, lines)
+        stripped.append((title, date, blocks, chrome, source))
+    seen, shown = collections.Counter(), {}
+    for _, _, blocks, _, _ in stripped:
+        for norm, line in edge_lines(blocks).items():
+            seen[norm] += 1
+            shown[norm] = min(shown.get(norm, line), line)  # not the first seen: order-free
+    repeated = {l for l, n in seen.items() if n >= REPEAT_MIN_DOCS}
+
+    stats = collections.Counter()
+    candidates, undated = [], 0
+    for title, date, blocks, chrome, source in stripped:
+        paragraphs, removed = drop_lines(blocks, repeated, lines)
+        chrome += removed
+        words = sum(len(p.split()) for p in paragraphs)
+        if chrome and chrome > MOSTLY_BOILERPLATE * (chrome + words):
+            skipped.append((source, "mostly boilerplate"))
+            continue
+        if not any(_prose_words(p) for p in paragraphs):
+            skipped.append((source, "no text"))
+            continue
+        undated += date is None
+        found, short = passages(paragraphs, args.min_words)
+        stats["too short"] += short
+        for i, (text, n) in enumerate(found, 1):
+            candidates.append({"title": title, "date": date, "source": source, "n": i,
+                               "text": text, "words": n, "key": _key(text)})
+
+    kept, stats["duplicate"] = dedupe(candidates)
+    picked = cap(kept, args.max_samples)
+    stats["over the cap"] = len(kept) - len(picked)
 
     args.out.mkdir(parents=True, exist_ok=True)
     rows, names = [], set()
-    for title, date, paragraphs, source in docs:
-        if not paragraphs:
-            skipped.append((source, "no text"))
-            continue
-        text = "\n\n".join(paragraphs)
-        name = f"{_slug(title)}_01_{_key(text)[:6]}.md"
-        if name in names:
-            skipped.append((source, "duplicate"))
+    for c in picked:
+        name = f"{_slug(c['title'])}_{c['n']:02d}_{c['key'][:6]}.md"
+        if name in names:  # same title, same place, same sha1 prefix
+            stats["duplicate"] += 1
             continue
         names.add(name)
-        (args.out / name).write_text(f"# {title}\n\n{text}\n", encoding="utf-8")
-        rows.append({"file": name, "date": date or "undated", "words": _words(paragraphs),
-                     "subject": title, "source": source})
+        (args.out / name).write_text(f"# {c['title']}\n\n{c['text']}\n", encoding="utf-8")
+        rows.append({"file": name, "date": c["date"] or "undated", "words": c["words"],
+                     "subject": c["title"], "source": c["source"]})
 
     rows.sort(key=lambda r: (-r["words"], r["file"]))
     with open(args.out / "index.csv", "w", newline="", encoding="utf-8") as f:
@@ -429,11 +740,26 @@ def main() -> None:
 
     for source, reason in skipped:
         print(f"skip {source}: {reason}")
-    print(f"read {_plural(len(rows), 'document')}, wrote {_plural(len(rows), 'sample')} to {args.out}/")
+    print(f"read {_plural(n_read, 'document')}, wrote {_plural(len(rows), 'sample')} to {args.out}/")
     if skipped:
-        print(f"skipped {len(skipped):,}:")
+        print(f"skipped {_plural(len(skipped), 'document')}:")
         for reason, n in collections.Counter(r for _, r in skipped).most_common():
             print(f"  {reason:<20}: {n:,}")
+    stats = +stats
+    if stats:
+        print(f"dropped {_plural(sum(stats.values()), 'passage')}:")
+        for reason, n in sorted(stats.items(), key=lambda kv: (-kv[1], kv[0])):
+            print(f"  {reason:<20}: {n:,}")
+    if lines:
+        print("boilerplate removed (lines, or short paragraphs of chrome):")
+        for reason, n in sorted(lines.items(), key=lambda kv: (-kv[1], kv[0])):
+            print(f"  {reason:<20}: {n:,}")
+    if repeated:
+        print(f"  lines that open or close {REPEAT_MIN_DOCS}+ documents, removed everywhere:")
+        for l in sorted(repeated, key=lambda l: (-seen[l], l)):
+            print(f"    {seen[l]:>4}  {shown[l][:70]}")
+    if before:
+        print(f"kept {_plural(undated, 'undated document')} (--before reads the front matter date only)")
     if any(r == "no pdftotext" for _, r in skipped):
         print(NO_PDFTOTEXT)
 
