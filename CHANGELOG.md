@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-20
+
 ### Added
 
 - Build a voice from a folder of your own writing (articles, posts, essays): `extract-documents.py` reads `.md`, `.txt`, `.html`/`.htm`, `.docx` and `.pdf` (through the `pdftotext` program from poppler when it is on PATH) plus a `--urls` list of pages you own, drops boilerplate and duplicates, and splits each document into passages of about 350 words (150 to 500), one passage per sample, at most 148 taken in turn from each document. An optional `--before` cutoff checks only a front-matter `date:`; undated documents are kept. The build asks you to confirm the writing is your own and not AI-assisted, and that you may send it to the text analysis API and to Claude.
