@@ -162,6 +162,24 @@ class CheckDoNot(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertEqual(out.splitlines(), ['BANNED "I believe" x1'])
 
+    def test_once_per_bullet_without_a_quote_caps_nothing(self):
+        voice = self.voice_file(
+            '# T: Writing Profile\n\n## Word choice\n\n'
+            '- Plain words, once per email at most.\n\n'
+            '## Do not\n\n- Do not use "delve".\n')
+        result, out = self.run_check("Plain words. Plain words again.", voice)
+        self.assertEqual(result, 0)
+        self.assertEqual(out, "")
+
+    def test_binary_rewrite_file_exits_2(self):
+        voice_ok = self.voice_file(MIN_VOICE)
+        path = self.tmp / "rewrite.txt"
+        path.write_bytes(b"\xff\xfe\x00binary")
+        proc = self.run_proc("--voice", str(voice_ok), "--rewrite", str(path))
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(len(proc.stderr.strip().splitlines()), 1)
+
     # Matching rules
 
     def test_robustness_does_not_match_robust(self):
