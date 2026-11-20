@@ -2,6 +2,8 @@ import pathlib
 import re
 import unittest
 
+from _load import BUILD, load
+
 README = pathlib.Path(__file__).resolve().parents[3] / "README.md"
 
 
@@ -63,6 +65,14 @@ class TestReadmeLocalReview(unittest.TestCase):
         build = self.text[start:self.text.index("**What leaves your machine.**", start)]
         self.assertIn("You review and approve the samples before the upload", build)
         self.assertIn("You review and approve the samples before the upload", self.paragraph)
+
+    def test_reference_set_count_matches_extract_cap(self):
+        # The reference set is extracted with the same --max-samples cap as
+        # the samples (build.md passes no override), so the README count must
+        # be the script's default.
+        cap = load(BUILD / "extract-samples.py", "extract_samples").MAX_SAMPLES
+        self.assertIn(f"the reference set: up to {cap} emails from other senders", self.paragraph)
+        self.assertNotIn("up to 200 emails", self.text)
 
 
 class TestReadmePluginInstall(unittest.TestCase):
