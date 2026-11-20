@@ -142,10 +142,10 @@ class BuildProfileTest(unittest.TestCase):
         os.environ.pop("TEXT_ANALYSIS_API_KEY", None)
 
     def build(self, *argv, api=None, key=("--api-key", "test-key"),
-              author=("--author", "Alex Rivera")):
+              author=("--author", "Alex Rivera"), senders=("--from", "alex@example.com")):
         api = api or FakeAPI()
-        args = ["--samples", str(self.samples), *author,
-                "--from", "alex@example.com", "--api", "https://api.test/",
+        args = ["--samples", str(self.samples), *author, *senders,
+                "--api", "https://api.test/",
                 "--api-key-file", str(self.dir / "no-key-file"), "-o", str(self.out), *key, *argv]
         with mock.patch.object(bp.urllib.request, "urlopen", api):
             _, self.stdout = run_main(bp, *args)
@@ -484,6 +484,113 @@ class BuildProfileTest(unittest.TestCase):
         self.assertTrue(self.out.exists())
         self.assertEqual(json.loads(self.out.read_text())["meta"]["samples"]["fingerprint_and_baseline"], n)
         self.assertGreaterEqual(api.credits, 0)
+
+    # --source-type: honest metadata for the document modes.
+
+    def document_samples(self):
+        """Three KEEP passages from two documents, one DROP from a third."""
+        write_samples(self.samples, [
+            {"file": "a_01.md", "words": 300, "verdict": "KEEP", "score": 5,
+             "source": "posts/a.md", "text": "Passage A one."},
+            {"file": "a_02.md", "words": 280, "verdict": "KEEP", "score": 4,
+             "source": "posts/a.md", "text": "Passage A two."},
+            {"file": "b_01.md", "words": 320, "verdict": "KEEP", "score": 3,
+             "source": "posts/b.md", "text": "Passage B one."},
+            {"file": "c_01.md", "words": 310, "verdict": "DROP", "score": 9,
+             "source": "posts/c.md", "text": "Passage C dropped."},
+        ])
+
+    def test_writing_build_writes_honest_metadata(self):
+        self.document_samples()
+        self.build("--source-type", "writing", senders=())
+        meta = json.loads(self.out.read_text())["meta"]
+        self.assertEqual(meta["source_type"], "writing")
+        self.assertEqual(meta["source"], "writing samples (2 documents), reviewed passages")
+        self.assertEqual(meta["sender_addresses"], [])
+        self.assertEqual(meta["reference"], {"description": "none", "count": 0})
+
+    def test_brand_build_writes_honest_metadata(self):
+        self.document_samples()
+        self.build("--source-type", "brand", senders=(), author=("--author", "Northwind"))
+        meta = json.loads(self.out.read_text())["meta"]
+        self.assertEqual(meta["source_type"], "brand")
+        self.assertEqual(meta["source"],
+                         "brand documents (2 documents, several authors), reviewed passages")
+        self.assertEqual(meta["sender_addresses"], [])
+        self.assertEqual(meta["reference"], {"description": "none", "count": 0})
+
+    def test_document_count_is_zero_without_a_source_column(self):
+        self.reviewed_samples()  # no source column
+        self.build("--source-type", "writing", senders=())
+        meta = json.loads(self.out.read_text())["meta"]
+        self.assertEqual(meta["source"], "writing samples (0 documents), reviewed passages")
+
+    def test_document_count_without_verdict_column_counts_every_row(self):
+        write_samples(self.samples, [
+            {"file": "a.md", "words": 300, "source": "posts/a.md", "text": "Passage A."},
+            {"file": "b.md", "words": 280, "source": "posts/b.md", "text": "Passage B."},
+            {"file": "c.md", "words": 320, "source": "posts/a.md", "text": "Passage C."},
+        ])
+        self.build("--source-type", "brand", senders=())
+        meta = json.loads(self.out.read_text())["meta"]
+        self.assertEqual(meta["source"],
+                         "brand documents (2 documents, several authors), reviewed passages")
+
+    def test_cutoff_is_appended_in_document_modes(self):
+        self.document_samples()
+        self.build("--source-type", "writing", "--cutoff", "2022-09-01", senders=())
+        meta = json.loads(self.out.read_text())["meta"]
+        self.assertEqual(meta["source"],
+                         "writing samples (2 documents), reviewed passages, dated before 2022-09-01")
+
+    def test_from_with_brand_exits_plainly_before_any_request(self):
+        self.document_samples()
+        api = FakeAPI()
+        with self.assertRaises(SystemExit) as cm, mock.patch("sys.stderr", io.StringIO()) as err:
+            self.build("--source-type", "brand", api=api)
+        self.assertIn("--from", err.getvalue())
+        self.assertIn("email", err.getvalue())
+        self.assertNotIn("Traceback", str(cm.exception))
+        self.assertEqual(api.requests, [])
+        self.assertFalse(self.out.exists())
+
+    def test_from_with_writing_exits_plainly_before_any_request(self):
+        self.document_samples()
+        api = FakeAPI()
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr", io.StringIO()) as err:
+            self.build("--source-type", "writing", api=api)
+        self.assertIn("--from", err.getvalue())
+        self.assertEqual(api.requests, [])
+
+    def test_from_with_explicit_email_source_type_still_works(self):
+        self.reviewed_samples()
+        self.build("--source-type", "email")
+        meta = json.loads(self.out.read_text())["meta"]
+        self.assertEqual(meta["source_type"], "email")
+        self.assertEqual(meta["sender_addresses"], ["alex@example.com"])
+
+    def test_unknown_source_type_is_refused(self):
+        self.reviewed_samples()
+        api = FakeAPI()
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr", io.StringIO()) as err:
+            self.build("--source-type", "mbox", api=api)
+        self.assertIn("invalid choice", err.getvalue())
+        self.assertEqual(api.requests, [])
+
+    def test_document_mode_with_reference_counts_and_describes_it_honestly(self):
+        self.document_samples()
+        ref = self.reference_set(2)
+        api = self.build("--source-type", "writing", "--reference", str(ref), senders=())
+        meta = json.loads(self.out.read_text())["meta"]
+        self.assertEqual(meta["reference"], {"description": "texts by other writers", "count": 2})
+        self.assertEqual(len(api.calls("/analyze/fingerprint")[0]["body"]["options"]["reference_texts"]), 2)
+
+    def test_document_mode_cost_is_the_same_formula(self):
+        self.document_samples()  # 3 KEEP passages, no reference: 1 + 3 + 0 + 3 = 7
+        api = self.build("--source-type", "writing", senders=())
+        self.assertIn("costs 7 credits", self.stdout)
+        self.assertEqual(api.credits, 1000 - 7)
+        self.assertEqual(sum(len(r["body"]["texts"]) for r in api.metered()), 7)
 
     def test_build_without_author_or_check_is_refused_before_any_request(self):
         self.reviewed_samples()
