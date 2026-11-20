@@ -14,14 +14,20 @@ Uses the text analysis API (https://api.yourvoice.dev):
                       specific to the author. Without it, they are ranked by
                       how often they appear, so common phrases rise to the top.
 
-Samples come from extract-samples.py. If index.csv has a "verdict" column
-(from the review step), only KEEP rows are used, best "score" first.
-Otherwise every sample is used, longest first.
+Samples come from extract-samples.py (email) or extract-documents.py (writing
+and brand). If index.csv has a "verdict" column (from the review step), only
+KEEP rows are used, best "score" first. Otherwise every sample is used, longest
+first. For writing and brand, when index.csv has a "source" column, samples are
+taken in turn from each document (best first within each), so the voice
+profile is not built from one long document.
 
 --source-type says what the samples came from: an email export (the default),
 your own writing, or brand documents. It is recorded in the profile, with the
 number of documents counted from the index's "source" column. --from records
 email sender addresses and is only accepted for email builds.
+
+Without a reference set the baseline is the author's own mean, so it has
+nothing to compare with; the build prints one line saying so.
 
 Each text sent costs 1 credit, so a build costs
   1 + kept samples + reference texts + min(kept samples, 100)
@@ -164,7 +170,9 @@ def body(path: Path) -> str:
     return path.read_text(encoding="utf-8").partition("\n")[2].strip()
 
 
-def ranked_files(samples: Path) -> list[str]:
+def ranked_files(samples: Path, source_type: str = "email") -> list[str]:
+    """Kept sample files, best first. For writing and brand with a "source"
+    column, one from each document in turn (documents in sorted order)."""
     with open(samples / "index.csv", newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     if rows and "verdict" in rows[0]:
@@ -177,14 +185,25 @@ def ranked_files(samples: Path) -> list[str]:
             return 0.0
 
     rows.sort(key=lambda r: (score(r), int(r.get("words") or 0)), reverse=True)
-    return [r["file"] for r in rows]
+    if source_type == "email" or not rows or "source" not in rows[0]:
+        return [r["file"] for r in rows]
+    by_source: dict[str, list[dict]] = {}
+    for r in rows:
+        by_source.setdefault(r["source"], []).append(r)
+    lists = [by_source[s] for s in sorted(by_source)]
+    return [l[i]["file"] for i in range(max(map(len, lists))) for l in lists if i < len(l)]
+
+
+def documents(n: int) -> str:
+    return f"{n} document" if n == 1 else f"{n} documents"
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--samples", type=Path, default=Path("samples"))
     ap.add_argument("--reference", type=Path, default=None,
-                    help="optional directory of .md texts by other writers (recommended)")
+                    help="optional directory of .md texts by other writers (default: none). "
+                         "build.md offers it for email only; documents have no reference set")
     ap.add_argument("--author", help="author name, recorded in the profile (required unless --check)")
     ap.add_argument("--source-type", choices=("email", "writing", "brand"), default="email",
                     help="what the samples came from: an email export, your own writing, "
@@ -229,7 +248,7 @@ def main() -> None:
         check(api, key, args.samples, args.reference)
         return
 
-    files = ranked_files(args.samples)
+    files = ranked_files(args.samples, args.source_type)
     if not files:
         sys.exit(f"error: no usable samples in {args.samples}")
     if len(files) < args.top:
@@ -240,6 +259,9 @@ def main() -> None:
     reference = [body(p) for p in reference_files]
     cost = build_cost(len(texts), len(reference))
     print(f"this build costs {cost} credits ({len(texts)} samples, {len(reference)} reference texts)")
+    if not reference:
+        print("note: no reference set, so the baseline is the author's own mean and "
+              "the voice file's Stats reference has nothing to compare")
 
     reply, balance = post_with_balance(api, "/analyze/voice-profile",
                                        {"texts": ["\n\n".join(texts[: args.top])]}, key)
@@ -282,9 +304,9 @@ def main() -> None:
         ref_description = "emails by other senders in the same mailbox"
     else:
         if args.source_type == "writing":
-            source = f"writing samples ({count_documents(args.samples)} documents), reviewed passages"
+            source = f"writing samples ({documents(count_documents(args.samples))}), reviewed passages"
         else:
-            source = (f"brand documents ({count_documents(args.samples)} documents, "
+            source = (f"brand documents ({documents(count_documents(args.samples))}, "
                       "several authors), reviewed passages")
         ref_description = "texts by other writers" if reference_files else "none"
     if args.cutoff:
