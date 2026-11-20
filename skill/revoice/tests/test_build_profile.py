@@ -17,11 +17,13 @@ FEATURES = {"avg_sentence_length": 10.0, "contractions": 0.5}
 
 # The whole profile a default build writes, pinned on main (5ab48c9) before
 # --source-type existed, with the generation date frozen at 2024-05-01.
-# A default build must keep writing exactly this.
+# A default build must keep writing exactly this, plus the new
+# meta.source_type field added with --source-type (the only allowed change).
 GOLDEN_DEFAULT_PROFILE = {
     "meta": {
         "author": "Alex Rivera",
         "generated": "2024-05-01",
+        "source_type": "email",
         "source": "email export, attachments ignored, reviewed samples",
         "sender_addresses": ["alex@example.com"],
         "api": {"url": "https://api.test", "version": "9.9.9"},
