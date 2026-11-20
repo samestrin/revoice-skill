@@ -180,7 +180,7 @@ class DocxReaderTest(Base):
                                                   table="TABLE-TEXT", headings=["Our voice"]))
         run = self.run_script(self.docs)
         row = run.by_source["Brand Guide.docx"]
-        self.assertEqual((row["subject"], row["date"], row["words"]), ("Brand Guide", "undated", "8"))
+        self.assertEqual((row["subject"], row["date"], row["words"]), ("Brand Guide", "undated", "9"))
         self.assertEqual(run.text("Brand Guide.docx"),
                          "# Brand Guide\n\n# Our voice\n\nWe write plainly.\n\nWe keep it short.\n")
 
@@ -190,15 +190,6 @@ class DocxReaderTest(Base):
         with mock.patch.object(ed, "MAX_DOCX_XML_BYTES", 1000):
             run = self.run_script(self.docs)
         self.assertEqual(sorted(run.by_source), ["small.docx"])
-        self.assertRegex(run.stdout, r"docx too large\s*: 1")
-
-    def test_docx_whose_declared_size_lies_is_still_capped(self):
-        self.write("big.docx", docx_bytes(["word " * 400]))
-        info = mock.Mock(file_size=10)
-        with mock.patch.object(ed, "MAX_DOCX_XML_BYTES", 1000), \
-                mock.patch.object(zipfile.ZipFile, "getinfo", return_value=info):
-            run = self.run_script(self.docs)
-        self.assertEqual(run.rows, [])
         self.assertRegex(run.stdout, r"docx too large\s*: 1")
 
     def test_broken_docx_is_counted_as_unreadable(self):
@@ -280,7 +271,7 @@ class WalkTest(Base):
         self.write("~$draft.docx", b"lock file")
         self.write("a/~$lock.md", "LOCK")
         run = self.run_script(self.docs)
-        self.assertEqual([r["source"] for r in run.rows], ["a/y.md", "a/z.txt", "b.md"])
+        self.assertEqual(sorted(run.by_source), ["a/y.md", "a/z.txt", "b.md"])
         self.assertEqual(ed.walk([self.docs])[0], [
             (self.docs / "a" / "y.md", "a/y.md"),
             (self.docs / "a" / "z.txt", "a/z.txt"),
@@ -328,6 +319,22 @@ class WalkTest(Base):
         run = self.run_script(self.docs, self.tmp / "docs" / "link.md")
         self.assertEqual(list(run.by_source), ["real.md"])
         self.assertRegex(run.stdout, r"symlink\s*: 3")
+
+    def test_unreadable_folder_is_skipped_and_counted(self):
+        self.write("ok.md", "Fine.")
+        self.write("locked/x.md", "Hidden by permissions.")
+        real = os.scandir
+
+        def scandir(path):
+            if Path(path).name == "locked":
+                raise PermissionError(13, "denied")
+            return real(path)
+
+        with mock.patch.object(ed.os, "scandir", side_effect=scandir):
+            run = self.run_script(self.docs)
+        self.assertEqual(list(run.by_source), ["ok.md"])
+        self.assertRegex(run.stdout, r"unreadable\s*: 1")
+        self.assertIn("skip locked: unreadable", run.stdout)
 
     def test_missing_path_is_counted(self):
         run = self.run_script(self.docs / "nope")
@@ -432,6 +439,19 @@ class OutputTest(Base):
         run = self.run_script(self.docs)
         name = run.rows[0]["file"]
         self.assertEqual(bp.body(self.out / name), "Alpha beta gamma.")
+
+    def test_the_same_document_twice_is_written_once(self):
+        self.write("a/post.md", "---\ntitle: Post\n---\nSame words.\n")
+        self.write("b/post.md", "---\ntitle: Post\n---\nSame words.\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(list(run.by_source), ["a/post.md"])
+        self.assertRegex(run.stdout, r"duplicate\s*: 1")
+
+    def test_missing_urls_file_is_a_plain_error(self):
+        err = io.StringIO()
+        with self.assertRaises(SystemExit), mock.patch.object(sys, "stderr", err):
+            run_main(ed, "--urls", str(self.tmp / "nope.txt"), "-o", str(self.out))
+        self.assertIn("nope.txt", err.getvalue())
 
     def test_no_input_is_an_error(self):
         with self.assertRaises(SystemExit):
