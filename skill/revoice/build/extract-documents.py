@@ -608,11 +608,13 @@ def _order(c: dict):
 
 
 def _held(grams: set, index: dict, kept: list[dict], c: dict) -> str | None:
-    """The other source whose kept passages hold most of these 5-grams."""
+    """The other source whose kept passages hold most of these 5-grams, if
+    that is DUPLICATE_SHARE of them: one shared phrase is not one document."""
     held = collections.Counter(s for g in grams
                                for s in {kept[k]["source"] for k in index.get(g, ())})
     held.pop(c["source"], None)
-    return min(held, key=lambda s: (-held[s], s)) if held else None
+    best = min(held, key=lambda s: (-held[s], s), default=None)
+    return best if best and held[best] >= DUPLICATE_SHARE * len(grams) else None
 
 
 def dedupe(items: list[dict]) -> tuple[list[dict], int, list[tuple[str, str]]]:
@@ -621,7 +623,8 @@ def dedupe(items: list[dict]) -> tuple[list[dict], int, list[tuple[str, str]]]:
     kept before it. Then, in _order, drop each kept passage with
     DUPLICATE_SHARE of its 5-grams among all the other kept passages (one that
     straddles two shorter ones). Also returns the pairs (source, other source)
-    for each dropped passage whose 5-grams were mostly in another source."""
+    for each dropped passage with DUPLICATE_SHARE of its 5-grams in the kept
+    passages of one other source."""
     items = sorted(items, key=_order)
     index: dict[tuple, list[int]] = collections.defaultdict(list)
     kept_grams: list[set] = []

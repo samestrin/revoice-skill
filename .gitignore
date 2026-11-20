@@ -12,6 +12,7 @@ skill/revoice/assets/*.md
 !skill/revoice/assets/README.md
 !skill/revoice/assets/example.md
 __pycache__/
+.coverage
 .DS_Store
 .claude/settings.local.json
 
