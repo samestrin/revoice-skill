@@ -579,6 +579,15 @@ class BoilerplateTest(PassageBase):
         self.assertIn(self.TAGLINE, run.text("a.md"))
         self.assertIn(self.TAGLINE, run.text("b.md"))
 
+    def test_a_section_heading_shared_by_three_documents_is_kept(self):
+        for i in range(3):
+            self.write(f"d{i}.md", f"## Introduction\n\n{prose(200, f'e{i}')}\n")
+        run = self.run_script(self.docs)
+        for row in run.rows:
+            self.assertTrue(run.text(row["source"]).startswith("# d"))
+            self.assertIn("\n\n## Introduction\n\n", run.text(row["source"]))
+        self.assertNotIn("repeated", run.stdout)
+
     def test_a_line_repeated_in_the_middle_of_documents_is_not_a_running_line(self):
         for i in range(3):
             tail = "\n\n".join(prose(10, f"d{i}t{j}") for j in range(6))
@@ -606,6 +615,11 @@ class BoilerplateTest(PassageBase):
         run = self.run_script(self.docs)
         self.assertIn(long_para, run.text("doc.txt"))
         self.assertIn(prose(100, "i1"), run.text("doc.txt"))
+
+    def test_a_fence_that_opens_on_a_short_chrome_like_line_still_hides_the_code(self):
+        self.write("doc.md", f"{prose(200, 'g1')}\n\n```\ncookie = 1\n\nCODE-AFTER = 2\n```\n\n{prose(100, 'g2')}\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(run.text("doc.md"), f"# doc\n\n{prose(200, 'g1')}\n\n{prose(100, 'g2')}\n")
 
     def test_an_unclosed_fence_drops_the_rest_of_the_document(self):
         self.write("doc.md", f"{prose(200, 'k1')}\n\n```\nCODE-A\n\n{prose(100, 'k2')}\n")
@@ -637,7 +651,7 @@ class BoilerplateTest(PassageBase):
 
 class PassageTest(PassageBase):
     def test_an_1800_word_document_gives_passages_of_150_to_500_words_with_no_paragraph_cut(self):
-        sizes = [40, 120, 90, 60, 140, 75, 110, 55, 130, 95, 85, 65, 135, 100, 80, 70, 125, 125]
+        sizes = [40, 120, 90, 60, 140, 75, 110, 55, 130, 95, 85, 65, 135, 100, 80, 70, 125, 125, 100]
         self.assertEqual(sum(sizes), 1800)
         paragraphs = [prose(n, f"q{i}") for i, n in enumerate(sizes)]
         self.write("long.md", "\n\n".join(paragraphs) + "\n")
@@ -796,6 +810,26 @@ class DedupeAndCapTest(PassageBase):
         self.assertEqual(forward, backward)
 
 
+    def test_two_folders_with_the_same_relative_path_give_the_same_output_in_any_order(self):
+        same = prose(300, "twin")
+        one = self.write("one/post.md", f"---\ntitle: First Title\n---\n{same}\n").parent
+        two = self.write("two/post.md", f"---\ntitle: Second Title\n---\n{same}\n").parent
+
+        def snapshot(name, *args):
+            self.out = self.tmp / name
+            self.run_script(*args)
+            return {p.name: p.read_bytes() for p in sorted(self.out.iterdir())}
+
+        self.assertEqual(snapshot("forward", one, two), snapshot("backward", two, one))
+
+    def test_a_negative_cap_or_minimum_is_a_plain_error(self):
+        for flag in ("--max-samples", "--min-words"):
+            err = io.StringIO()
+            with self.assertRaises(SystemExit), mock.patch.object(sys, "stderr", err):
+                run_main(ed, str(self.docs), flag, "-1", "-o", str(self.out))
+            self.assertIn(flag, err.getvalue())
+
+
 class BeforeTest(PassageBase):
     def test_before_drops_a_later_document_and_keeps_an_undated_one_with_the_count(self):
         self.write("old.md", f"---\ndate: 2019-05-01\n---\n{prose(200, 'old')}\n")
@@ -808,6 +842,15 @@ class BeforeTest(PassageBase):
         self.assertIn("skip new.md: on or after --before", run.stdout)
         self.assertRegex(run.stdout, r"on or after --before\s*: 2")
         self.assertIn("kept 1 undated document", run.stdout)
+
+    def test_a_tagline_counted_only_in_documents_after_the_cutoff_is_kept(self):
+        tagline = "Thanks for reading the Acme newsletter."
+        self.write("old.md", f"---\ndate: 2019-05-01\n---\n{prose(200, 'old')}\n\n{tagline}\n")
+        for i in range(2):
+            self.write(f"new{i}.md", f"---\ndate: 2023-01-0{i + 1}\n---\n{prose(200, f'new{i}')}\n\n{tagline}\n")
+        run = self.run_script(self.docs, "--before", "2022-01-01")
+        self.assertIn(tagline, run.text("old.md"))
+        self.assertNotIn("repeated", run.stdout)
 
     def test_a_bad_before_date_is_a_plain_error(self):
         err = io.StringIO()
