@@ -14,6 +14,7 @@ repo="${2:?usage: $0 <installed skill folder> <repo checkout>}"
 
 helpers=(
   build/build-profile.py
+  build/extract-documents.py
   build/extract-samples.py
   build/mbox-filter-before.py
   build/review-samples.py
