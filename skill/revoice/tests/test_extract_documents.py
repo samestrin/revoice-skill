@@ -273,6 +273,14 @@ class IconAndWidgetTest(Base):
             "stem")
         self.assertEqual(paragraphs, ["Intro.", "After."])
 
+    def test_prose_just_before_a_nested_widget_is_kept(self):
+        # "lead" is only written when the widget's <div> starts; the widget's
+        # lines begin after it, so it must survive the widget being dropped.
+        _, _, paragraphs = ed.read_html(
+            "<div><p>p1</p><p>p2</p><p>p3</p>lead<div class=w><p>$ a</p><p>$ b</p>"
+            "<p>$ c</p><p>$ d</p></div><p>after</p></div>", "stem")
+        self.assertEqual(paragraphs, ["p1", "p2", "p3", "lead", "after"])
+
     def test_a_container_with_few_or_no_prompt_lines_is_kept(self):
         page = ("<div><p>$5 million raised.</p><p>$10 for a ticket.</p><p>&gt;50% grew.</p></div>"
                 "<div><p>$ one prompt</p><p>prose line</p><p>more prose</p><p>&gt; quote</p></div>"
