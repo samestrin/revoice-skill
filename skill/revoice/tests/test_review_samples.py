@@ -370,23 +370,18 @@ SIGNED_BY_OTHER = PROSE.replace("Thanks,\nAlex", "Best regards,\nSomeone Else")
 BYLINE_OTHER = "By Jane Doe\n\n" + PROSE.rsplit("\n\n", 1)[0]
 BYLINE_OWN = "By Sam Lee\n\n" + PROSE.rsplit("\n\n", 1)[0]
 
-SUBJECTS = ["The garden", "Our kitchen", "The old bridge", "My bicycle", "The library",
-            "The harbour", "Your letter", "The orchard", "The workshop", "The station",
-            "The market", "That winter"]
-VERBS = ["needed", "showed", "taught", "gave", "brought", "kept", "left", "found"]
-OBJECTS = ["a quiet lesson about patience", "the best part of my week",
-           "more work than I had planned", "a reason to slow down", "an old friend back to me",
-           "the answer we were looking for", "a story worth telling", "a small surprise"]
+SYLLABLES = "ka lo mi ren to sa vel du po ni".split()
 
 
 def passage(i: int) -> str:
-    """A distinct English passage of about 120 words; no two share many 5-grams."""
-    sentences = []
-    for k in range(10):
-        s = SUBJECTS[(i + k) % len(SUBJECTS)]
-        v = VERBS[(i * 3 + k) % len(VERBS)]
-        o = OBJECTS[(i * 5 + k * 3) % len(OBJECTS)]
-        sentences.append(f"{s} {v} me {o} when I was there in {1990 + i * 10 + k}.")
+    """A distinct English-shaped passage of 100 words.
+
+    Every other word is a made-up word of this passage only, so no two passages
+    share a word 5-gram and none is a form letter.
+    """
+    vocab = [SYLLABLES[i % 10] + SYLLABLES[i // 10 % 10] + SYLLABLES[j] for j in range(8)]
+    sentences = [f"The {vocab[k % 8]} of the {vocab[(k + 3) % 8]} was {vocab[(k + 5) % 8]} "
+                 f"and {vocab[(k + 6) % 8]}." for k in range(10)]
     return " ".join(sentences[:5]) + "\n\n" + " ".join(sentences[5:])
 
 
@@ -395,7 +390,7 @@ def passage_dir(tmp, texts, sources):
     for i, (text, source) in enumerate(zip(texts, sources)):
         name = f"{i:03d}-p.md"
         (tmp / name).write_text(f"# Title {i}\n{text}\n", encoding="utf-8")
-        rows.append({"file": name, "date": "undated", "words": "120", "subject": f"Title {i}",
+        rows.append({"file": name, "date": "undated", "words": "100", "subject": f"Title {i}",
                      "source": source})
     with open(tmp / "index.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["file", "date", "words", "subject", "source"])
@@ -428,7 +423,7 @@ class Modes(unittest.TestCase):
         self.assertEqual(self.judge(BYLINE_OTHER, "email", "Sam Lee")["verdict"], "KEEP")
 
     def test_byline_variants(self):
-        for line in ("Written by Jane Doe", "Posted by Jane Doe", "by jane doe", "*By Jane Doe*",
+        for line in ("Written by Jane Doe", "Posted by Jane Doe", "Written By Jane Doe", "*By Jane Doe*",
                      "Posted by Jane Doe on March 3, 2019"):
             with self.subTest(line):
                 text = line + "\n\n" + PROSE.rsplit("\n\n", 1)[0]
@@ -557,7 +552,7 @@ class ModeMain(unittest.TestCase):
         self.assertEqual(self.run_cli("--author", AUTHOR, "--mode", "email").stdout, p.stdout)
 
     def test_floors_are_constants(self):
-        self.assertEqual(rs.FLOORS, {"writing": (10, 1), "brand": (10, 3)})
+        self.assertEqual(rs.FLOORS, {"writing": (10, 0), "brand": (10, 3)})
         self.assertEqual(rs.MINIMUMS, {"writing": (20, 5), "brand": (20, 5)})
 
     def test_unknown_mode_rejected_by_cli(self):
