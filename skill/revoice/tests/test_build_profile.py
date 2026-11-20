@@ -1,3 +1,4 @@
+import contextlib
 import io
 import json
 import os
@@ -698,8 +699,9 @@ class BuildProfileTest(unittest.TestCase):
 
     def test_help_does_not_recommend_reference_for_documents(self):
         out = io.StringIO()
-        with self.assertRaises(SystemExit), mock.patch("sys.stdout", out):
-            run_main(bp, "--help")
+        with self.assertRaises(SystemExit), mock.patch.object(bp.sys, "argv", ["bp", "--help"]), \
+                contextlib.redirect_stdout(out):
+            bp.main()
         text = " ".join(out.getvalue().split())
         self.assertNotIn("(recommended)", text)
         self.assertIn("documents have no reference set", text)
