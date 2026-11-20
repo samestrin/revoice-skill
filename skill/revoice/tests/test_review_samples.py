@@ -365,6 +365,204 @@ class MainTest(unittest.TestCase):
         self.assertEqual(list(self.dir.glob("*.tmp")), [])
 
 
+QUOTED = DROP_CASES[0][1]
+SIGNED_BY_OTHER = PROSE.replace("Thanks,\nAlex", "Best regards,\nSomeone Else")
+BYLINE_OTHER = "By Jane Doe\n\n" + PROSE.rsplit("\n\n", 1)[0]
+BYLINE_OWN = "By Sam Lee\n\n" + PROSE.rsplit("\n\n", 1)[0]
+
+SYLLABLES = "ka lo mi ren to sa vel du po ni".split()
+
+
+def passage(i: int) -> str:
+    """A distinct English-shaped passage of 100 words.
+
+    Every other word is a made-up word of this passage only, so no two passages
+    share a word 5-gram and none is a form letter.
+    """
+    vocab = [SYLLABLES[i % 10] + SYLLABLES[i // 10 % 10] + SYLLABLES[j] for j in range(8)]
+    sentences = [f"The {vocab[k % 8]} of the {vocab[(k + 3) % 8]} was {vocab[(k + 5) % 8]} "
+                 f"and {vocab[(k + 6) % 8]}." for k in range(10)]
+    return " ".join(sentences[:5]) + "\n\n" + " ".join(sentences[5:])
+
+
+def passage_dir(tmp, texts, sources):
+    rows = []
+    for i, (text, source) in enumerate(zip(texts, sources)):
+        name = f"{i:03d}-p.md"
+        (tmp / name).write_text(f"# Title {i}\n{text}\n", encoding="utf-8")
+        rows.append({"file": name, "date": "undated", "words": "100", "subject": f"Title {i}",
+                     "source": source})
+    with open(tmp / "index.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["file", "date", "words", "subject", "source"])
+        w.writeheader()
+        w.writerows(rows)
+
+
+class Modes(unittest.TestCase):
+    """--mode email|writing|brand, per the review-modes table in epic plan 17."""
+
+    def judge(self, text, mode, author=AUTHOR):
+        return rs.review([text, *FILLERS], author, mode)[0]
+
+    def test_quoted_passage_dropped_in_email_only(self):
+        self.assertEqual(self.judge(QUOTED, "email")["reason"], "quoted or forwarded text")
+        for mode in ("writing", "brand"):
+            with self.subTest(mode):
+                self.assertEqual(self.judge(QUOTED, mode)["verdict"], "KEEP")
+
+    def test_other_signoff_dropped_in_email_only(self):
+        self.assertEqual(self.judge(SIGNED_BY_OTHER, "email")["reason"], "written in another name")
+        for mode in ("writing", "brand"):
+            with self.subTest(mode):
+                self.assertEqual(self.judge(SIGNED_BY_OTHER, mode)["verdict"], "KEEP")
+
+    def test_byline_of_someone_else_dropped_in_writing_only(self):
+        r = self.judge(BYLINE_OTHER, "writing", "Sam Lee")
+        self.assertEqual((r["verdict"], r["reason"]), ("DROP", "written by someone else"))
+        self.assertEqual(self.judge(BYLINE_OTHER, "brand", "Sam Lee")["verdict"], "KEEP")
+        self.assertEqual(self.judge(BYLINE_OTHER, "email", "Sam Lee")["verdict"], "KEEP")
+
+    def test_byline_variants(self):
+        for line in ("Written by Jane Doe", "Posted by Jane Doe", "Written By Jane Doe", "*By Jane Doe*",
+                     "Posted by Jane Doe on March 3, 2019"):
+            with self.subTest(line):
+                text = line + "\n\n" + PROSE.rsplit("\n\n", 1)[0]
+                self.assertEqual(self.judge(text, "writing", "Sam Lee")["reason"],
+                                 "written by someone else")
+        last = PROSE.rsplit("\n\n", 1)[0] + "\n\nBy Jane Doe"
+        self.assertEqual(self.judge(last, "writing", "Sam Lee")["reason"], "written by someone else")
+
+    def test_byline_rule_needs_a_name(self):
+        for line in ("By Sam Lee", "By S. Lee", "Written by Sam", "By the way, this is mine.",
+                     "By Friday we need the plan.", "By Monday", "By March 2019"):
+            with self.subTest(line):
+                text = line + "\n\n" + PROSE.rsplit("\n\n", 1)[0]
+                self.assertEqual(self.judge(text, "writing", "Sam Lee")["verdict"], "KEEP")
+        # A byline in the middle of a passage is a quotation, not the byline.
+        middle = PROSE.replace("\n\n", "\n\nBy Jane Doe\n\n", 1).rsplit("\n\n", 1)[0]
+        self.assertEqual(self.judge(middle, "writing", "Sam Lee")["verdict"], "KEEP")
+
+    def test_byline_rule_off_without_author(self):
+        self.assertEqual(self.judge(BYLINE_OTHER, "writing", "")["verdict"], "KEEP")
+        self.assertEqual(self.judge(BYLINE_OWN, "writing", "Sam Lee")["verdict"], "KEEP")
+
+    def test_generic_rules_stay_on_in_every_mode(self):
+        for mode in rs.MODES:
+            for name, text, _, reason in DROP_CASES:
+                if reason in ("quoted or forwarded text", "written in another name"):
+                    continue
+                with self.subTest(mode=mode, case=name):
+                    self.assertEqual(self.judge(text, mode)["reason"], reason)
+
+    def test_default_mode_is_email(self):
+        texts = [QUOTED, SIGNED_BY_OTHER, BYLINE_OTHER, *FILLERS]
+        self.assertEqual(rs.review(texts, AUTHOR), rs.review(texts, AUTHOR, "email"))
+
+    def test_new_reason_is_listed(self):
+        self.assertIn("written by someone else", rs.REASONS)
+
+    def test_unknown_mode_rejected(self):
+        with self.assertRaises(ValueError):
+            rs.review([PROSE], AUTHOR, "mbox")
+
+
+class ModeMain(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def run_cli(self, *argv):
+        return subprocess.run([sys.executable, str(BUILD / "review-samples.py"),
+                               "--samples", str(self.dir), *argv],
+                              capture_output=True, text=True)
+
+    def verdicts(self):
+        with open(self.dir / "index.csv", newline="", encoding="utf-8") as f:
+            return [r["verdict"] for r in csv.DictReader(f)]
+
+    def test_passages_are_distinct_keeps(self):
+        texts = [passage(i) for i in range(12)]
+        self.assertEqual([v["verdict"] for v in rs.review(texts, "", "writing")], ["KEEP"] * 12)
+
+    def test_coverage_counts_keep_passages_and_distinct_sources(self):
+        texts = [passage(i) for i in range(12)] + [DROP_CASES[3][1]]
+        sources = [f"doc{i % 4}.md" for i in range(12)] + ["doc9.md"]
+        passage_dir(self.dir, texts, sources)
+        _, out = run_main(rs, "--samples", str(self.dir), "--mode", "writing")
+        # The dropped list's document is not counted.
+        self.assertIn("coverage: 12 KEEP passages from 4 documents", out)
+        self.assertIn("reviewed 13 samples: 12 KEEP, 1 DROP", out)
+
+    def test_coverage_without_a_source_column_counts_no_documents(self):
+        sample_dir(self.dir, [passage(i) for i in range(10)])
+        _, out = run_main(rs, "--samples", str(self.dir), "--mode", "writing")
+        self.assertIn("coverage: 10 KEEP passages from 0 documents", out)
+
+    def test_nine_keep_passages_exit_3_in_writing_and_still_write_the_index(self):
+        passage_dir(self.dir, [passage(i) for i in range(9)], [f"d{i}.md" for i in range(9)])
+        p = self.run_cli("--mode", "writing", "--author", "Sam Lee")
+        self.assertEqual(p.returncode, 3, p.stderr)
+        self.assertIn("coverage: 9 KEEP passages from 9 documents", p.stdout)
+        self.assertIn("10", p.stderr)
+        self.assertEqual(self.verdicts(), ["KEEP"] * 9)
+
+    def test_ten_keep_passages_pass_in_writing(self):
+        passage_dir(self.dir, [passage(i) for i in range(10)], [f"d{i}.md" for i in range(10)])
+        p = self.run_cli("--mode", "writing")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("coverage: 10 KEEP passages from 10 documents", p.stdout)
+
+    def test_drops_do_not_count_toward_the_floor(self):
+        texts = [passage(i) for i in range(9)] + [QUOTED.replace("Sounds", "By Jane Doe\n\nSounds")]
+        passage_dir(self.dir, texts, [f"d{i}.md" for i in range(10)])
+        p = self.run_cli("--mode", "writing", "--author", "Sam Lee")
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertEqual(self.verdicts(), ["KEEP"] * 9 + ["DROP"])
+
+    def test_brand_needs_three_documents(self):
+        texts = [passage(i) for i in range(12)]
+        passage_dir(self.dir, texts, [f"d{i % 2}.md" for i in range(12)])
+        p = self.run_cli("--mode", "brand", "--author", "Acme")
+        self.assertEqual(p.returncode, 3, p.stderr)
+        self.assertIn("coverage: 12 KEEP passages from 2 documents", p.stdout)
+        self.assertIn("3 documents", p.stderr)
+        passage_dir(self.dir, texts, [f"d{i % 3}.md" for i in range(12)])
+        p = self.run_cli("--mode", "brand", "--author", "Acme")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("coverage: 12 KEEP passages from 3 documents", p.stdout)
+
+    def test_brand_needs_ten_passages(self):
+        passage_dir(self.dir, [passage(i) for i in range(9)], [f"d{i}.md" for i in range(9)])
+        self.assertEqual(self.run_cli("--mode", "brand").returncode, 3)
+
+    def test_between_floor_and_minimum_warns_and_passes(self):
+        passage_dir(self.dir, [passage(i) for i in range(12)], [f"d{i % 6}.md" for i in range(12)])
+        p = self.run_cli("--mode", "writing")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("below the minimum", p.stdout)
+        self.assertIn("20", p.stdout)
+
+    def test_email_mode_has_no_floor_and_no_coverage_line(self):
+        sample_dir(self.dir, [PROSE])
+        p = self.run_cli("--author", AUTHOR)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout, "reviewed 1 samples: 1 KEEP, 0 DROP\n")
+        self.assertEqual(p.stderr, "")
+        self.assertEqual(self.run_cli("--author", AUTHOR, "--mode", "email").stdout, p.stdout)
+
+    def test_floors_are_constants(self):
+        self.assertEqual(rs.FLOORS, {"writing": (10, 0), "brand": (10, 3)})
+        self.assertEqual(rs.MINIMUMS, {"writing": (20, 5), "brand": (20, 5)})
+
+    def test_unknown_mode_rejected_by_cli(self):
+        sample_dir(self.dir, [PROSE])
+        p = self.run_cli("--mode", "mbox")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("invalid choice", p.stderr)
+        self.assertIn("--mode", self.run_cli("--help").stdout)
+
+
 class CliContract(unittest.TestCase):
     """The output build-profile.py reads, and the command line build.md calls."""
 
