@@ -18,6 +18,11 @@ Samples come from extract-samples.py. If index.csv has a "verdict" column
 (from the review step), only KEEP rows are used, best "score" first.
 Otherwise every sample is used, longest first.
 
+--source-type says what the samples came from: an email export (the default),
+your own writing, or brand documents. It is recorded in the profile, with the
+number of documents counted from the index's "source" column. --from records
+email sender addresses and is only accepted for email builds.
+
 Each text sent costs 1 credit, so a build costs
   1 + kept samples + reference texts + min(kept samples, 100)
 credits. The first call reports the balance; if it cannot cover the rest of the
@@ -100,6 +105,17 @@ def count_reference(reference: Path | None) -> int:
     return len(list(reference.glob("*.md"))) if reference and reference.is_dir() else 0
 
 
+def count_documents(samples: Path) -> int:
+    """Distinct 'source' values among the kept rows (0 without the column)."""
+    with open(samples / "index.csv", newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    if not rows or "source" not in rows[0]:
+        return 0
+    if "verdict" in rows[0]:
+        rows = [r for r in rows if r["verdict"].strip().upper() == "KEEP"]
+    return len({r["source"] for r in rows})
+
+
 def check(api: str, key: str, samples: Path, reference: Path | None) -> None:
     """Spend 1 credit to show the key works, the balance and the build's cost."""
     _, balance = post_with_balance(api, "/analyze/voice-profile", {"texts": [CHECK_TEXT]}, key)
@@ -170,8 +186,12 @@ def main() -> None:
     ap.add_argument("--reference", type=Path, default=None,
                     help="optional directory of .md texts by other writers (recommended)")
     ap.add_argument("--author", help="author name, recorded in the profile (required unless --check)")
+    ap.add_argument("--source-type", choices=("email", "writing", "brand"), default="email",
+                    help="what the samples came from: an email export, your own writing, "
+                         "or brand documents (default: email)")
     ap.add_argument("--from", dest="senders", action="append", default=[],
-                    help="author's address, recorded in the profile (repeatable)")
+                    help="author's address, recorded in the profile (repeatable; "
+                         "email builds only)")
     ap.add_argument("--cutoff", default=None,
                     help="the date the mbox was filtered to, recorded in the profile (YYYY-MM-DD)")
     ap.add_argument("--api", default="https://api.yourvoice.dev")
@@ -190,6 +210,9 @@ def main() -> None:
     ap.add_argument("--balance", type=int, default=None,
                     help="with --estimate: the balance --check printed, to say if it is short")
     args = ap.parse_args()
+    if args.senders and args.source_type != "email":
+        ap.error("--from records email sender addresses and cannot be used with "
+                 f"--source-type {args.source_type}; remove --from or use --source-type email")
     if args.estimate:
         estimate(args.samples, args.reference, args.balance)
         return
@@ -254,18 +277,28 @@ def main() -> None:
     except (OSError, ValueError):
         health = {}  # the version is informational; still write the profile
 
-    source = "email export, attachments ignored, reviewed samples"
+    if args.source_type == "email":
+        source = "email export, attachments ignored, reviewed samples"
+        ref_description = "emails by other senders in the same mailbox"
+    else:
+        if args.source_type == "writing":
+            source = f"writing samples ({count_documents(args.samples)} documents), reviewed passages"
+        else:
+            source = (f"brand documents ({count_documents(args.samples)} documents, "
+                      "several authors), reviewed passages")
+        ref_description = "texts by other writers" if reference_files else "none"
     if args.cutoff:
         source += f", dated before {args.cutoff}"
     profile = {
         "meta": {
             "author": args.author,
             "generated": date.today().isoformat(),
+            "source_type": args.source_type,
             "source": source,
             "sender_addresses": args.senders,
             "api": {"url": api, "version": health.get("version")},
             "samples": {"voice_profile": top_files, "fingerprint_and_baseline": len(files)},
-            "reference": {"description": "emails by other senders in the same mailbox",
+            "reference": {"description": ref_description,
                           "count": len(reference_files)},
         },
         "voice_profile": voice_profile,
