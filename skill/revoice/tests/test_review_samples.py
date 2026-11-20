@@ -642,11 +642,11 @@ class RealRun(unittest.TestCase):
         self.assertEqual(rs.review(texts, "Sam Estrin"), out)
 
     def test_synthetic_model_output_shapes(self):
-        tail = "\n\n" + PROSE.rsplit("\n\n", 1)[0]
         cases = {
             "colon lead-in": "Here is what ChatGPT said:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
-            "prompt with a short block": "The prompt:\nlist three fruits\nno prose\nkeep it short"
-                                         + tail,
+            # Most of the words come before the lead-in, so only its short block decides.
+            "prompt with a short block": PROSE.rsplit("\n\n", 1)[0]
+                                         + "\n\nThe prompt:\nlist three fruits\nno prose\nkeep it short",
             # Lines the code rule above does not see (no "$ ", no closing brace).
             "code-like lines": "\n".join([
                 "This is what came back from the call.",
@@ -666,6 +666,10 @@ class RealRun(unittest.TestCase):
             "This is a long sentence that mentions the model and the prompt and ends with a colon:\n\n"
             + FILLERS[0],
             "Our Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            # A paragraph that opens with a price is not a shell prompt.
+            "$2,400 later, " + FILLERS[0] + " " + FILLERS[1] + "\n\n" + FILLERS[2],
+            # A "...:" lead-in followed by sentences is not a quoted block.
+            PROSE.rsplit("\n\n", 1)[0] + "\n\nThe prompt:\nI asked for a plan.\nIt gave one.\nI used it.",
         ]
         for text in cases:
             for mode in DOCUMENT_MODES:
