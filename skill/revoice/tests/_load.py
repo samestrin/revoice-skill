@@ -13,8 +13,22 @@ from unittest import mock
 
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures"
+REAL_RUN = FIXTURES / "real_run"
+GOLDEN = TESTS / "golden"
 SKILL = TESTS.parent
 BUILD = SKILL / "build"
+
+
+def real_run(name: str) -> str:
+    """The full text of one real-run excerpt fixture (see real_run/README.md)."""
+    return (REAL_RUN / name).read_text(encoding="utf-8")
+
+
+def real_run_body(name: str) -> str:
+    """A sample-shaped fixture without its first ('# title') line, the way the
+    build helpers read a sample body. For the .md excerpts, not the HTML or
+    pdftotext files."""
+    return real_run(name).partition("\n")[2].strip()
 
 
 def load(path: Path, name: str):
