@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 import urllib.error
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -13,6 +14,43 @@ bp = load(BUILD / "build-profile.py", "build_profile")
 es = load(BUILD / "extract-samples.py", "extract_samples")
 
 FEATURES = {"avg_sentence_length": 10.0, "contractions": 0.5}
+
+# The whole profile a default build writes, pinned on main (5ab48c9) before
+# --source-type existed, with the generation date frozen at 2024-05-01.
+# A default build must keep writing exactly this.
+GOLDEN_DEFAULT_PROFILE = {
+    "meta": {
+        "author": "Alex Rivera",
+        "generated": "2024-05-01",
+        "source": "email export, attachments ignored, reviewed samples",
+        "sender_addresses": ["alex@example.com"],
+        "api": {"url": "https://api.test", "version": "9.9.9"},
+        "samples": {
+            "voice_profile": ["c.md", "a.md", "d.md"],
+            "fingerprint_and_baseline": 3,
+        },
+        "reference": {
+            "description": "emails by other senders in the same mailbox",
+            "count": 0,
+        },
+    },
+    "voice_profile": {"feature_vector": dict(FEATURES), "summary": "s"},
+    "comparison": {
+        "usage": "POST /analyze/compare-profiles with profiles [author, candidate] and "
+                 "options.baseline; set the author's feature_vector to author_feature_vector_mean",
+        "baseline": {
+            "mean": dict(FEATURES),
+            "std": {k: 0.0 for k in FEATURES},
+        },
+        "author_feature_vector_mean": dict(FEATURES),
+    },
+    "fingerprint": {
+        "distinctive_phrases": ["the hill route"],
+        "first_person_patterns": [],
+        "informality": 0.2,
+        "corpus_document_count": 3,
+    },
+}
 
 
 METERED = ("/analyze/voice-profile", "/analyze/fingerprint")
@@ -193,6 +231,13 @@ class BuildProfileTest(unittest.TestCase):
         self.assertEqual(profile["comparison"]["baseline"]["std"], {k: 0.0 for k in FEATURES})
         self.assertEqual(profile["comparison"]["author_feature_vector_mean"], FEATURES)
         self.assertEqual(profile["fingerprint"]["distinctive_phrases"], ["the hill route"])
+
+    def test_default_build_writes_the_golden_profile(self):
+        self.reviewed_samples()
+        frozen = mock.Mock(today=lambda: date(2024, 5, 1))
+        with mock.patch.object(bp, "date", frozen):
+            self.build()
+        self.assertEqual(json.loads(self.out.read_text()), GOLDEN_DEFAULT_PROFILE)
 
     def test_http_error_exits_with_path_code_and_detail(self):
         self.reviewed_samples()
