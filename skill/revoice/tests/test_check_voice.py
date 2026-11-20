@@ -108,6 +108,21 @@ class CheckVoice(unittest.TestCase):
         result, out = self.check(text)
         self.assertEqual(result, 0, out)
 
+    def test_utf8_bom_and_crlf_do_not_break_the_title(self):
+        # A voice file saved by a Windows editor: BOM plus CRLF line ends.
+        text = "\ufeff" + EXAMPLE_TEXT.replace("\n", "\r\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            voice = Path(tmp) / "voice.md"
+            voice.write_bytes(text.encode("utf-8"))
+            result, out = run_main(cv, "--voice", str(voice))
+        self.assertEqual(result, 0, out)
+
+    def test_invent_rule_in_any_word_order_counts(self):
+        body = ('- Do not use AI tells: "delve", "robust".\n'
+                "- Do not invent names, numbers or facts.\n")
+        result, out = self.check(with_section_body(EXAMPLE_TEXT, "Do not", body))
+        self.assertEqual(result, 0, out)
+
     # -- one broken copy per problem ---------------------------------------
 
     def test_do_not_removed_reports_missing_section(self):
