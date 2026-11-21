@@ -621,14 +621,24 @@ class RealRunEndToEndTest(EndToEndBase):
                 '<span class="material-symbols-outlined" aria-hidden="true">'
                 "arrow_forward</span></a>"]
         for i, p in enumerate(paras):
-            if i == 3:
-                page.append(WIDGET)
             if i < 5:
                 page.append(f'<p><span class="material-symbols-outlined" '
                             f'aria-hidden="true">{next(icons)}</span> {escape(p)}</p>')
             else:
                 page.append(f"<p>{escape(p)}</p>")
-        page += [f"<p>{escape(p)}</p>" for p in self.filler("html")]
+        # The widget and one span per icon word sit on filler unique to this
+        # copy: the article paragraphs above dedupe against the PDF, so an
+        # icon there would never reach a kept sample. On kept filler the
+        # icon and widget assertions fail if _hidden() or drop_widget()
+        # stop dropping them.
+        for i, p in enumerate(self.filler("html")):
+            if i == 2:
+                page.append(WIDGET)
+            if i < len(ICON_WORDS):
+                page.append(f'<p><span class="material-symbols-outlined" '
+                            f'aria-hidden="true">{ICON_WORDS[i]}</span> {escape(p)}</p>')
+            else:
+                page.append(f"<p>{escape(p)}</p>")
         page.append(f"<footer>\u00a9 2019 {REAL_AUTHOR}. All rights reserved.</footer>")
         page.append("</body></html>")
         (folder / "comparing13.html").write_text("".join(page), encoding="utf-8")
