@@ -142,10 +142,19 @@ WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?")
 
 # Quoted model output (writing and brand). A lead-in is a short line that either ends in
 # ":" and names a model or a prompt ("Here is what ChatGPT said:"), or is a heading whose
-# last word is RESPONSE_WORDS after a capitalised name ("AI21 Studio Response").
+# last word is RESPONSE_WORDS after a capitalised name that holds MODEL_NAMES ("AI21 Studio
+# Response") or ends in MODEL_KINDS ("Fireworks AI Response"). The bare words output,
+# response and answer are no model signal ("Incident Response", "The short answer:");
+# vendor names only count in a heading, so "Groq pricing:" or "Our AI roadmap:" is not a
+# lead-in, and a generic word only right before the response word ("AI Incident Response"
+# is an ordinary heading).
 MODEL_WORDS = re.compile(
-    r"\b(chatgpt|claude|gpt[\w.-]*|gemini|llms?|the model|the prompt|prompt|output|"
-    r"response|answer)\b", re.I)
+    r"\b(chatgpt|claude|gpt[\w.-]*|gemini|llms?|the model|the prompt|"
+    r"(model|assistant|bot|ai)(['\u2019]s)? (response|output|answer|reply|completion))\b", re.I)
+MODEL_NAMES = frozenset(
+    "chatgpt claude gemini bard llm llama mistral mixtral openai anthropic cohere groq grok "
+    "ai21 jamba deepseek qwen copilot perplexity".split())
+MODEL_KINDS = frozenset("ai model assistant bot chatbot".split())
 RESPONSE_WORDS = frozenset("response output answer reply completion".split())
 LEAD_IN_WORDS = 8  # a longer line ending in ":" is a sentence, not a lead-in
 # After a "...:" lead-in, this many short lines without sentence punctuation are a quoted block.
@@ -235,7 +244,9 @@ def is_lead_in(line: str) -> bool:
         return bool(MODEL_WORDS.search(line))
     *name, last = toks
     return (last.lower() in RESPONSE_WORDS and bool(name)
-            and all(t[0].isupper() and t.lower() not in FUNCTION_WORDS for t in name))
+            and all(t[0].isupper() and t.lower() not in FUNCTION_WORDS for t in name)
+            and (name[-1].lower() in MODEL_KINDS
+                 or any(t.lower() in MODEL_NAMES or t.lower().startswith("gpt") for t in name)))
 
 
 def is_model_output(text: str) -> bool:

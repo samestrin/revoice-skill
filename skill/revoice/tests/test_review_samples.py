@@ -644,6 +644,16 @@ class RealRun(unittest.TestCase):
     def test_synthetic_model_output_shapes(self):
         cases = {
             "colon lead-in": "Here is what ChatGPT said:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            # F1: a model or vendor name, or "model"/"assistant" before the response word.
+            "vendor heading": "Mistral Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "model response heading": "Model Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "GPT heading": "GPT-4o Output\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "AI response heading": "AI Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "vendor AI heading": "Fireworks AI Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "vendor first heading": "AI21 Studio Response\n\n" + FILLERS[0] + "\n\n"
+                                    + FILLERS[1],
+            "assistant colon lead-in": "The assistant's answer:\n\n" + FILLERS[0] + "\n\n"
+                                       + FILLERS[1],
             # Most of the words come before the lead-in, so only its short block decides.
             "prompt with a short block": PROSE.rsplit("\n\n", 1)[0]
                                          + "\n\nThe prompt:\nlist three fruits\nno prose\nkeep it short",
@@ -666,6 +676,22 @@ class RealRun(unittest.TestCase):
             "This is a long sentence that mentions the model and the prompt and ends with a colon:\n\n"
             + FILLERS[0],
             "Our Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            # F1: an ordinary section heading or a human lead-in names no model.
+            "Incident Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Customer Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "The short answer:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "## Final Output\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "My reply:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Our business model:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Our AI roadmap:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Groq pricing:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "A note to the AI:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Questions for the AI:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            # A generic model word counts only right before the response word.
+            "AI Incident Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "AI Safety Incident Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Model Risk Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Bot Traffic Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             # A paragraph that opens with a price is not a shell prompt.
             "$2,400 later, " + FILLERS[0] + " " + FILLERS[1] + "\n\n" + FILLERS[2],
             # A "...:" lead-in followed by sentences is not a quoted block.
