@@ -647,6 +647,7 @@ class RealRun(unittest.TestCase):
             # F1: a model or vendor name, or "model"/"assistant" before the response word.
             "vendor heading": "Mistral Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             "model response heading": "Model Response\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "GPT heading": "GPT-4o Output\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             "assistant colon lead-in": "The assistant's answer:\n\n" + FILLERS[0] + "\n\n"
                                        + FILLERS[1],
             # Most of the words come before the lead-in, so only its short block decides.
@@ -678,6 +679,8 @@ class RealRun(unittest.TestCase):
             "## Final Output\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             "My reply:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             "Our business model:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Our AI roadmap:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Groq pricing:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             # A paragraph that opens with a price is not a shell prompt.
             "$2,400 later, " + FILLERS[0] + " " + FILLERS[1] + "\n\n" + FILLERS[2],
             # A "...:" lead-in followed by sentences is not a quoted block.
