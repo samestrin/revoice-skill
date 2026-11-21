@@ -147,7 +147,7 @@ WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?")
 # Response", "The short answer:"); vendor names only count before a response word, so
 # "Groq pricing:" or "Our AI roadmap:" is not a lead-in.
 MODEL_WORDS = re.compile(
-    r"\b(chatgpt|claude|gpt[\w.-]*|gemini|llms?|the model|the prompt|the ai|"
+    r"\b(chatgpt|claude|gpt[\w.-]*|gemini|llms?|the model|the prompt|"
     r"(model|assistant|bot|ai)(['\u2019]s)? (response|output|answer|reply|completion))\b", re.I)
 MODEL_NAMES = frozenset(
     "chatgpt claude gemini bard llm llama mistral mixtral openai anthropic cohere groq grok "
