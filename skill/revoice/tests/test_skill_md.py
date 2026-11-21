@@ -239,6 +239,66 @@ class BuildSourcesTest(unittest.TestCase):
         self.assertNotRegex(without_email(build_phase(2)), MBOX)
 
 
+class BuildCostAndStatsWordingTest(unittest.TestCase):
+    """Epic 19.1 T1 (bugs 7 and 8, the wording half): phase 6 writes the Stats
+    reference table only with a reference set, phase 3 quotes the cost as a
+    ceiling that phase 4 can stop or lower, and phase 4 ends by quoting the
+    exact figure from the KEEP count and --estimate."""
+
+    def test_phase_numbers_stay_zero_to_eight(self):
+        self.assertEqual(re.findall(r"(?m)^## Phase (\d+):", BUILD), [str(n) for n in range(9)])
+
+    def test_phase_6_writes_the_stats_table_only_with_a_reference_set(self):
+        phase = build_phase(6)
+        self.assertRegex(phase, r"only when the profile was built with a reference set")
+        self.assertRegex(phase, r"author's own mean")
+        self.assertRegex(phase, r"nothing to compare")
+
+    def test_phase_6_skips_the_table_and_says_why_in_one_line(self):
+        phase = build_phase(6)
+        self.assertRegex(phase, r"skip the table")
+        self.assertRegex(phase, r"one line saying why")
+
+    def test_phase_6_keeps_the_heading_the_voice_check_requires(self):
+        # check/check-voice.py lists Stats reference among the 11 required
+        # headings, so the skip drops the table, not the heading.
+        self.assertRegex(build_phase(6), r"keep the `## Stats reference` heading")
+
+    def test_phase_3_quotes_the_cost_as_a_ceiling(self):
+        phase = build_phase(3)
+        self.assertRegex(phase, r"the most this build can spend")
+        self.assertRegex(phase, r"up to")
+
+    def test_phase_3_says_the_review_can_stop_or_lower_it(self):
+        phase = build_phase(3)
+        self.assertIn("phase 4", phase)
+        self.assertRegex(phase, r"stop the build")
+        self.assertRegex(phase, r"lower")
+
+    def test_phase_4_ends_by_quoting_the_exact_cost_from_the_keep_count(self):
+        phase = build_phase(4)
+        stop = phase[phase.index("### Stop: the user approves the samples"):]
+        self.assertRegex(stop, r"--estimate")
+        self.assertRegex(stop, r"KEEP rows")
+        self.assertRegex(stop, r"exact")
+        self.assertIn("phase 3", stop)
+        # The re-quote comes after the go, on the recounted KEEP rows.
+        self.assertLess(stop.index("When they say go"), stop.index("--estimate"))
+
+    def test_the_new_wording_reaches_document_builds(self):
+        # No document phase mentions an email-only step: the ceiling, the
+        # re-quote and the skip rule live in shared text, not under ### Email.
+        self.assertRegex(without_email(build_phase(3)), r"up to")
+        self.assertRegex(without_email(build_phase(4)), r"--estimate")
+        self.assertRegex(without_email(build_phase(6)), r"skip the table")
+        for n in (3, 4, 6):
+            with self.subTest(phase=n):
+                text = without_email(build_phase(n))
+                self.assertNotRegex(text, MBOX)
+                self.assertNotIn("once per email", text)
+                self.assertNotRegex(text, r"(?i)sent from")
+
+
 def voice_check_step(phase: str) -> str:
     """The numbered phase 6 step that runs the check command (not step 2, which
     only names the script), up to the next step or subsection."""
