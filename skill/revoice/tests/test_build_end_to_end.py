@@ -10,22 +10,31 @@ The fake is a standard-library HTTP server on 127.0.0.1, so nothing leaves
 the machine and no real key is used. Each helper runs as a subprocess and
 reads only what the step before it wrote, so renaming an output file or a
 CSV column breaks this test.
+
+RealRunEndToEndTest runs the same row on the real-run shapes (Epic 19.1 T2):
+the guarded excerpts of the operator's 0.3.0 run, written into a temp folder
+as .html, .docx, .pdf (through a stub pdftotext) and .md, with fictional
+filler so every document clears the review's floor.
 """
 import csv
 import io
 import json
+import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import threading
 import unittest
 import zipfile
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from _load import BUILD, FIXTURES, load
+from _load import BUILD, FIXTURES, load, real_run, real_run_body
 
 bp = load(BUILD / "build-profile.py", "build_profile_e2e")
 
@@ -297,10 +306,19 @@ def doc_paragraph(d: int, p: int, sentences: int = 4) -> str:
 
 
 def docx_bytes(paragraphs: list[str]) -> bytes:
-    """A minimal .docx: one w:p per string, nothing else the reader needs."""
+    """A minimal .docx: one w:p per string, nothing else the reader needs.
+    A string opening with "# " marks becomes a Word Heading style, the way
+    a heading is saved in a real .docx."""
     w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-    body = "".join(f'<w:p><w:r><w:t xml:space="preserve">{escape(p)}</w:t></w:r></w:p>'
-                   for p in paragraphs)
+
+    def one(p: str) -> str:
+        m = re.match(r"(#{1,6})\s+(.*)\Z", p, re.S)
+        style = (f'<w:pPr><w:pStyle w:val="Heading{len(m.group(1))}"/></w:pPr>'
+                 if m else "")
+        text = m.group(2) if m else p
+        return f'<w:p>{style}<w:r><w:t xml:space="preserve">{escape(text)}</w:t></w:r></w:p>'
+
+    body = "".join(one(p) for p in paragraphs)
     xml = (f'<?xml version="1.0" encoding="UTF-8"?>'
            f'<w:document xmlns:w="{w}"><w:body>{body}</w:body></w:document>')
     buf = io.BytesIO()
@@ -504,6 +522,253 @@ class DocumentsEndToEndTest(EndToEndBase):
                 self.assertEqual(columns, DOC_COLUMNS + REVIEW_COLUMNS)
                 self.assertTrue(all(r["verdict"] == "KEEP" for r in reviewed))
         self.assertEqual(self.server.requests, [])
+
+
+# The real-run shapes (Epic 19.1 T2): the operator's 0.3.0 run read 5 sources
+# that are 3 distinct articles (tests/fixtures/real_run/README.md). The guarded
+# excerpts are too short alone (3 articles give 3 passages, under the review's
+# floor of 10), so each temporary article carries its real excerpts first, then
+# unique fictional paragraphs in the doc_paragraph() style: enough for at least
+# 5 KEEP passages per distinct document. Every file draws its filler from its
+# own noun banks, so no two passages share half their word 5-grams.
+REAL_AUTHOR = "Sam Estrin"
+ICON_WORDS = ("arrow_forward", "smart_toy", "verified_user", "hub", "lock", "public")
+# The terminal widget of brand_icons_widgets.html, line for line: on a page
+# with icon fonts it is chrome, never prose.
+WIDGET = """<div class="terminal-widget">
+<div class="terminal-title">estrin-lab :: status</div>
+<div class="terminal-line">ONLINE</div>
+<div class="terminal-line">[01] :: PRIVATE LAB 17 MACHINES</div>
+<div class="terminal-line">&gt; Linux | macOS | Windows</div>
+<div class="terminal-line">&gt; KVM + UTM virtual machines | Docker</div>
+<div class="terminal-line">&gt; 10GbE local backbone | 1GbE internet uplink</div>
+<div class="terminal-line">[02] :: POWER PROTECTED</div>
+<div class="terminal-line">&gt; multiple UPS groups | solar battery backup</div>
+<div class="terminal-line">&gt; auto-shutdown on power loss</div>
+</div>"""
+LLM_OUTPUTS = ("llm_output_docx_a", "llm_output_docx_b", "llm_output_pdf_a")
+# The Word copy's section headings: plain lines in the extracted-text fixture,
+# Heading styles in the .docx the fixture was extracted from.
+DOCX_HEADINGS = {"The Real Winner?", "Which Would I Avoid?",
+                 "Why Is jamba-instruct Tested Twice?", "Reproducing My Comparison"}
+
+
+def llm_answer_snippets() -> dict[str, list[str]]:
+    """Ten-word runs from every quoted answer in each LLM-output fixture
+    (hard line wraps normalised), so a KEEP passage holding any part of an
+    answer is caught wherever a passage boundary falls."""
+    out = {}
+    for name in LLM_OUTPUTS:
+        snips = []
+        for block in real_run_body(name + ".md").split("\n\n"):
+            ws = block.split()
+            if len(ws) >= 12:
+                snips.append(" ".join(ws[:10]))
+            if len(ws) >= 24:
+                snips.append(" ".join(ws[12:22]))
+        out[name] = snips
+    return out
+
+
+class RealRunEndToEndTest(EndToEndBase):
+    """The real-run shapes through extract-documents.py, review-samples.py
+    --mode writing and build-profile.py --source-type writing: one article
+    saved as .html, .docx and .pdf is one document, quoted model output and
+    table text never reach KEEP, icon words never reach a sample, and the
+    15 profile samples come from every document."""
+
+    # Filler noun banks per file: no bank is used twice, so every fictional
+    # paragraph is its own (the 12 banks of write_documents(), 8 each).
+    BANKS = {"html": (0, 1), "docx": (2, 3), "pdf": (4, 5),
+             "faster": (6, 7, 8), "llmenv": (9, 10, 11)}
+
+    def filler(self, kind: str) -> list[str]:
+        return [doc_paragraph(d, p) for d in self.BANKS[kind] for p in range(8)]
+
+    def pdftotext_stub(self, text: str) -> None:
+        """A fake pdftotext first on PATH: it prints the article's text layer
+        (the copy_article_pdf.txt hard wraps kept), so no PDF is parsed and
+        nothing leaves the machine."""
+        bindir = self.work / "bin"
+        bindir.mkdir()
+        layer = self.work / "pdf-text.txt"
+        layer.write_text(text, encoding="utf-8")
+        stub = bindir / "pdftotext"
+        stub.write_text(f'#!/bin/sh\nexec cat "{layer}"\n', encoding="utf-8")
+        stub.chmod(0o755)
+        self.env["PATH"] = f"{bindir}{os.pathsep}{self.env.get('PATH', '')}"
+
+    def write_real_documents(self, folder: Path) -> None:
+        """The 5 sources of the real run: article 1 as .html (the URL copy,
+        with the icon spans and the terminal widget such a page carries),
+        .docx (built with zipfile, carrying the quoted responses and the
+        results table) and .pdf (through the pdftotext stub); articles 2 and
+        3 as .md. Real excerpts first, then the file's own filler."""
+        folder.mkdir()
+
+        def blocks(name: str) -> list[str]:
+            return real_run_body(name).split("\n\n")
+
+        # The URL copy as HTML: the reader must drop the icon-font spans, the
+        # widget, the nav and the footer, and keep the article's paragraphs
+        # word for word, so the copies still dedupe into one document.
+        title = real_run("copy_article_html.md").partition("\n")[0][2:]
+        paras = blocks("copy_article_html.md")
+        icons = iter(ICON_WORDS[1:])
+        page = ["<html><head><title>" + escape(title) + "</title></head><body>",
+                "<nav>Home About Contact</nav>",
+                '<a class="cta" href="#responses">Jump to the responses '
+                '<span class="material-symbols-outlined" aria-hidden="true">'
+                "arrow_forward</span></a>"]
+        for i, p in enumerate(paras):
+            if i < 5:
+                page.append(f'<p><span class="material-symbols-outlined" '
+                            f'aria-hidden="true">{next(icons)}</span> {escape(p)}</p>')
+            else:
+                page.append(f"<p>{escape(p)}</p>")
+        # The widget and one span per icon word sit on filler unique to this
+        # copy: the article paragraphs above dedupe against the PDF, so an
+        # icon there would never reach a kept sample. On kept filler the
+        # icon and widget assertions fail if _hidden() or drop_widget()
+        # stop dropping them.
+        for i, p in enumerate(self.filler("html")):
+            if i == 2:
+                page.append(WIDGET)
+            if i < len(ICON_WORDS):
+                page.append(f'<p><span class="material-symbols-outlined" '
+                            f'aria-hidden="true">{ICON_WORDS[i]}</span> {escape(p)}</p>')
+            else:
+                page.append(f"<p>{escape(p)}</p>")
+        page.append(f"<footer>\u00a9 2019 {REAL_AUTHOR}. All rights reserved.</footer>")
+        page.append("</body></html>")
+        (folder / "comparing13.html").write_text("".join(page), encoding="utf-8")
+
+        # The Word copy: the article text, the one-cell-per-line results
+        # table and the quoted model responses it carries, then filler.
+        docx = ([real_run("copy_article_docx.md").partition("\n")[0]]
+                + ["# " + b if b in DOCX_HEADINGS else b
+                   for b in blocks("copy_article_docx.md")]
+                + blocks("table_docx_numbers.md")
+                + blocks("llm_output_docx_a.md")
+                + blocks("llm_output_docx_b.md")
+                + self.filler("docx"))
+        (folder / "comparing13.docx").write_bytes(docx_bytes(docx))
+
+        # The PDF copy: pdftotext text with its hard wraps, a page break
+        # between pages, the quoted responses and filler wrapped the same way.
+        pdf = (real_run("copy_article_pdf.txt") + "\f"
+               + real_run_body("llm_output_pdf_a.md") + "\f"
+               + "\n\n".join(textwrap.fill(p, 78) for p in self.filler("pdf")) + "\f")
+        self.pdftotext_stub(pdf)
+        (folder / "comparing13.pdf").write_bytes(b"%PDF-1.4 stub: read by the pdftotext on PATH")
+
+        # The other two articles, each its own document.
+        for stem, names in (("faster", ("prose_72faster_a.md", "prose_72faster_b.md")),
+                            ("llmenv", ("prose_llmenv_a.md", "prose_llmenv_b.md"))):
+            title = real_run(names[0]).partition("\n")[0][2:]
+            paras = [real_run_body(n) for n in names] + self.filler(stem)
+            front = f'---\ntitle: "{title}"\ndate: 2019-06-15\n---\n\n'
+            (folder / f"{stem}.md").write_text(front + "\n\n".join(paras) + "\n",
+                                               encoding="utf-8")
+
+    @unittest.skipIf(os.name == "nt", "the pdftotext stub is a shell script")
+    def test_real_run_writing_pipeline(self):
+        self.write_real_documents(self.work / "real-docs")
+
+        # Phase 2: the 5 sources are read as 3 distinct documents.
+        out = self.run_helper("extract-documents.py", "real-docs", "-o", "samples")
+        self.assertIn("read 5 documents (3 distinct), wrote", out)
+        columns, rows = self.read_index("samples")
+        self.assertEqual(columns, DOC_COLUMNS)
+        self.assertEqual(len({r["source"] for r in rows}), 3)
+        for r in rows:
+            self.assertTrue((self.work / "samples" / r["file"]).is_file())
+            text = (self.work / "samples" / r["file"]).read_text(encoding="utf-8")
+            # No icon word and no widget line survives into any sample.
+            for icon in ICON_WORDS:
+                self.assertNotRegex(text, rf"\b{icon}\b", (icon, r["file"]))
+            for widget in ("estrin-lab", "ONLINE", "PRIVATE LAB", "KVM", "UPS",
+                           "auto-shutdown", "> "):
+                self.assertNotIn(widget, text, (widget, r["file"]))
+            self.assertNotIn("All rights reserved", text)
+            self.assertNotIn("Home About Contact", text)
+
+        # Phase 4: the review keeps at least 5 passages per document, drops
+        # the quoted model output and the table, and warns (3 documents is
+        # below the minimum of 5) without stopping (above the floor of 10).
+        review = self.run_helper("review-samples.py", "--samples", "samples",
+                                 "--mode", "writing", "--author", REAL_AUTHOR)
+        columns, reviewed = self.read_index("samples")
+        self.assertEqual(columns, DOC_COLUMNS + REVIEW_COLUMNS)
+        self.assertEqual([r["file"] for r in reviewed], [r["file"] for r in rows])
+        kept = [r for r in reviewed if r["verdict"] == "KEEP"]
+        by_doc = Counter(r["source"] for r in kept)
+        self.assertEqual(len(by_doc), 3)
+        for source, n in by_doc.items():
+            self.assertGreaterEqual(n, 5, source)
+        self.assertIn(f"coverage: {len(kept)} KEEP passages from 3 documents\n", review)
+        self.assertIn("below the minimum for writing: 20 KEEP passages from 5 documents "
+                      "give a stronger profile; this one will be weaker", review)
+        self.assertNotIn("below the floor", review)
+        self.assertIn("quoted model output", review)
+        self.assertIn("table or numbers", review)
+        snippets = llm_answer_snippets()
+        self.assertTrue(all(snippets.values()))
+        # Every fixture's quoted answers reached the review and were dropped
+        # there, so the KEEP check below is not vacuous.
+        dropped_bodies = [" ".join(bp.body(self.work / "samples" / r["file"]).split())
+                          for r in reviewed if r["verdict"] == "DROP"]
+        for name, snips in snippets.items():
+            self.assertTrue(any(s in b for s in snips for b in dropped_bodies), name)
+        for r in kept:
+            body = " ".join(bp.body(self.work / "samples" / r["file"]).split())
+            for snips in snippets.values():
+                for snippet in snips:
+                    self.assertNotIn(snippet, body, (snippet, r["file"]))
+
+        # Phase 5: the build against the fake API. The 15 profile samples
+        # come from every document, none above ceil(15 / documents).
+        out = self.run_helper("build-profile.py", "--samples", "samples",
+                              "--author", REAL_AUTHOR, "--source-type", "writing",
+                              "--api", self.api, "--api-key-file", str(self.key_file),
+                              "-o", "voice-profile.json")
+        cost = bp.build_cost(len(kept), 0)
+        self.assertIn(f"this build costs {cost} credits "
+                      f"({len(kept)} samples, 0 reference texts)", out)
+        profile = json.loads((self.work / "voice-profile.json").read_text(encoding="utf-8"))
+        meta = profile["meta"]
+        self.assertEqual(meta["source"], "writing samples (3 documents), reviewed passages")
+        self.assertEqual(meta["source_type"], "writing")
+        self.assertEqual(meta["author"], REAL_AUTHOR)
+        self.assertEqual(meta["reference"], {"description": "none", "count": 0})
+        self.assertEqual(meta["api"], {"url": self.api, "version": "9.9.9"})
+        top = meta["samples"]["voice_profile"]
+        self.assertEqual(len(top), 15)
+        self.assertLessEqual(set(top), {r["file"] for r in kept})
+        source_of = {r["file"]: r["source"] for r in reviewed}
+        top_counts = Counter(source_of[f] for f in top)
+        self.assertEqual(set(top_counts), set(by_doc))  # none missing
+        per_doc = math.ceil(15 / len(by_doc))
+        for source, n in top_counts.items():
+            self.assertLessEqual(n, per_doc, source)
+        self.assertEqual(meta["samples"]["fingerprint_and_baseline"], len(kept))
+
+        # The stub was told to read exactly those 15 samples, and was charged
+        # exactly the texts build_cost() predicts; only loopback was reached.
+        requests = self.server.requests
+        voice = [r for r in requests if r["path"] == "/analyze/voice-profile"]
+        self.assertEqual(voice[0]["body"]["texts"],
+                         ["\n\n".join(bp.body(self.work / "samples" / f) for f in top)])
+        metered = [r for r in requests if r["path"] in METERED]
+        self.assertEqual(sum(len(r["body"]["texts"]) for r in metered), cost)
+        self.assertEqual(BALANCE - self.server.credits, cost)
+        self.assertEqual({r["key"] for r in metered}, {KEY})
+        fingerprint = [r for r in requests if r["path"] == "/analyze/fingerprint"]
+        self.assertEqual(len(fingerprint), 1)
+        self.assertEqual(len(fingerprint[0]["body"]["texts"]), len(kept))
+        self.assertNotIn("options", fingerprint[0]["body"])  # no reference set
+        self.assertEqual([r["path"] for r in requests if r["path"] not in METERED],
+                         ["/health"])
 
 
 if __name__ == "__main__":
