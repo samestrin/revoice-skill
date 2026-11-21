@@ -92,7 +92,7 @@ After extraction, run from `WORK`:
 <python> SKILL/build/build-profile.py --estimate --balance <balance> --samples samples --reference reference
 ```
 
-`<balance>` is the balance phase 0 printed; leave out `--balance` if it said "unknown". This calls no API and spends nothing: phase 0 already checked the key, and the 148-sample default with one paid check fits the 250 free credits exactly. Leave out `--reference reference` if the reference set is off (it always is for documents). Report the estimated credit cost and the balance. If the balance is short, say so and ask before going on.
+`<balance>` is the balance phase 0 printed; leave out `--balance` if it said "unknown". This calls no API and spends nothing: phase 0 already checked the key, and the 148-sample default with one paid check fits the 250 free credits exactly. Leave out `--reference reference` if the reference set is off (it always is for documents). Report the estimated cost as the most this build can spend — say "up to <cost> credits", not a promise: the review in phase 4 drops samples and can stop the build there or lower the cost, and phase 4 ends by quoting the exact figure. Report the balance with it. If the balance is short, say so and ask before going on.
 
 ## Phase 4: Review the samples
 
@@ -124,6 +124,14 @@ No sample has left the machine yet; phase 5 is the first upload. Before it, tell
 - To keep a sample from being sent, they change that row's `verdict` to DROP in `samples/index.csv`. Only KEEP rows are sent.
 
 Then wait for an explicit go. Do not start phase 5 on silence or on an answer that is not a clear yes. Do not read the samples yourself at this step: the user reviews them, not you. When they say go, count the KEEP rows in `samples/index.csv` again (for documents, also the distinct `source` values among them). Email: if they dropped so many that fewer than 15 are KEEP, tell them the profile will be weaker and ask whether to continue, as above. Documents: below the floor, stop as above; below the minimum, warn and ask as above.
+
+Then close phase 4 by quoting the exact cost of this build. Run the estimate again on the recounted KEEP rows:
+
+```
+<python> SKILL/build/build-profile.py --estimate --balance <balance> --samples samples --reference reference
+```
+
+Leave out `--reference reference` if the reference set is off, and `--balance` if phase 0 said "unknown". It counts only the KEEP rows in `samples/index.csv`, calls no API and spends nothing. Report the figure it prints as what phase 5 will spend — the exact cost now, not the "up to" ceiling from phase 3.
 
 ## Phase 5: Build the profile JSON
 
@@ -166,7 +174,7 @@ It sends the kept samples to the API at https://api.yourvoice.dev/ and can take 
    - **Punctuation and formatting habits:** parentheses, quotes, dashes, exclamation points, lists, contractions.
    - **Paragraphs and structure:** paragraph length and the usual shape of one piece from start to finish (see the subsection).
    - **Pronouns:** when they write "I" and when "we".
-   - **Stats reference:** a small table of features where the author differs from `comparison.baseline` mean, in words ("higher", "lower"), marked as calibration only.
+   - **Stats reference:** write the comparison table only when the profile was built with a reference set (the email opt-in): a small table of features where the author differs from `comparison.baseline` mean, in words ("higher", "lower"), marked as calibration only. Without a reference set — always for documents, the default for email — the baseline is the author's own mean, so there is nothing to compare: keep the `## Stats reference` heading (the voice file check requires it), skip the table, and write one line saying why, for example "Built without a reference set, so the baseline is your own mean and there is nothing to compare."
    - **Do not:** AI tells to avoid (see the subsection), anything this author never does, "do not copy the author's typos", and "do not invent facts, numbers or names".
    - **Short examples from the corpus:** 4 to 6 short quotes, each labeled with the habit it shows.
    - **Before and after:** one invented generic AI-style draft and the same text in this voice.
