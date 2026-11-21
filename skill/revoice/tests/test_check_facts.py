@@ -149,6 +149,17 @@ class CheckFactsTest(unittest.TestCase):
         # 2026-13-45 is not a real date; its digits compare as plain numbers.
         code, out, _ = self.run_check("Ref 2026-13-45.", "Ref 2026-13-45.")
         self.assertEqual((code, out), (0, ""))
+        facts = cf.extract("Ref 2026-13-45.")
+        self.assertEqual(
+            facts, {("number", "2026"), ("number", "13"), ("number", "45")}
+        )
+
+    def test_changed_digit_in_impossible_dates_is_reported(self):
+        # The fallback must keep the digits: without it both sides would
+        # yield one None date token and the changed digit would be missed.
+        code, out, _ = self.run_check("Ref 2026-13-45.", "Ref 2026-14-45.")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "MISSING number 13\nADDED number 14\n")
 
     # -- URLs and emails ------------------------------------------------------
 
