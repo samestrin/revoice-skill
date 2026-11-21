@@ -15,15 +15,22 @@ and the pages listed in --urls:
                 them starting with a "$ " or "> " prompt)
   .docx         the paragraphs of the main document; tables, headers and
                 footers are dropped
-  .pdf          through the pdftotext program (poppler) when it is on PATH
+  .pdf          through the pdftotext program (poppler) when it is on PATH; a
+                word broken by a hyphen at a line end ("real-" / "time") is
+                joined only when the whole word ("realtime") is elsewhere in
+                the same document
   --urls FILE   one http(s) URL per line, fetched from this machine and read
                 as HTML (or as text for a text/plain page); "#" lines are
-                comments. Use it only for pages you own.
+                comments. Use it only for pages you own. A trailing
+                " - Site Name" (or " | ", en or em dash) is dropped from the
+                titles it ends when 2 or more of the pages' titles share it
 
 Anything else is skipped and counted. Then:
 
   - boilerplate is dropped: markdown code (fenced or indented), pipe tables,
-    image-only and link-only lines, page numbers, contents lines with dotted
+    image-only and link-only lines, page numbers (but not a bare "01" to
+    "99" before a heading or a short title-cased line, unless it is the
+    first or last line of a PDF page), contents lines with dotted
     leaders, short legal and site-chrome paragraphs ("\u00a9", "all rights
     reserved", "privacy policy", "cookie", "subscribe to", ...), and any line
     of at most 80 characters among the first or last 6 lines of 3 or more
@@ -46,7 +53,8 @@ Anything else is skipped and counted. Then:
   - at most --max-samples (default 148) are kept, round-robin across
     documents: each document's longest passage first, then the second, ...
 
-Each passage is written as ``# <title>`` followed by its text, and index.csv
+Each passage is written as ``# <title>`` followed by its text (a heading
+that opens a passage is written without its "#" marks), and index.csv
 lists every sample with the columns file, date, words, subject, source. The
 same inputs in any order give the same output.
 """
@@ -103,12 +111,18 @@ DUPLICATE_SHARE = 0.5
 
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 HEADING = re.compile(r"^#{1,6}\s")
+HEADING_MARKS = re.compile(r"^#{1,6}\s+")  # taken off a heading line written into a passage
 INDENTED = re.compile(r"^(?: {4}|\t)")
 TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
 TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$")
 LINK = r"(?:!?\[[^\]]*\]\([^)]*\)|<?https?://\S+?>?)"
 LINK_ONLY = re.compile(rf"^\s*(?:[-*+\u2022]\s+)?{LINK}(?:\s*[|\u2022\u00b7,]?\s*{LINK})*\s*$")
 PAGE_NUMBER = re.compile(r"(?i)^[\s\-\u2013\u2014]*(?:page\s+)?\d{1,4}(?:\s*(?:of|/)\s*\d{1,4})?[\s\-\u2013\u2014]*$")
+# A numbered section ("01" over "Getting Started") looks like a page number;
+# it is one only when it stands alone next to a page break.
+SECTION_LABEL = re.compile(r"^\s*\d{1,2}\s*$")
+LABEL_TITLE_WORDS = 8  # a longer line after "01" is prose, not a section title
+PAGE_BREAK = "\f"  # a paragraph of its own between two pdftotext pages
 CONTENTS = re.compile(r"(?:\.\s?){4,}\s*\d{1,4}\s*$")
 CHROME = re.compile(r"(?i)\u00a9|\ball rights reserved\b|\bterms (?:of|and) (?:use|service)\b|"
                     r"\bprivacy policy\b|\bcookies?\b|\bsubscribe to\b|\bshare this\b|"
@@ -349,10 +363,36 @@ def read_pdf(path: Path, stem: str):
         raise Skip("pdftotext failed")
     if proc.returncode != 0:
         raise Skip("pdftotext failed")
-    paragraphs = _paragraphs(proc.stdout.decode("utf-8", "replace").replace("\f", "\n\n"))
+    text = join_hyphens(proc.stdout.decode("utf-8", "replace"))
+    paragraphs = []
+    for page in text.split("\f"):
+        paragraphs += [PAGE_BREAK, *_paragraphs(page)]
+    paragraphs.append(PAGE_BREAK)
     if sum(len(p.split()) for p in paragraphs) < PDF_MIN_WORDS:
         raise Skip("no text layer")
     return stem, None, paragraphs
+
+
+BROKEN = re.compile(r"([A-Za-z]+)-[ \t]*$")
+BROKEN_REST = re.compile(r"[ \t]*([a-z]+)([^\w\s-]*)(?=\s|$)[ \t]*(.*)$")  # "time," and the rest
+
+
+def join_hyphens(text: str) -> str:
+    """Join "real-" at a line end and "time" at the next line's start when
+    "realtime" is in the text unbroken; otherwise it may be "real-time"."""
+    known = set(re.findall(r"[a-z]+", text.lower()))
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines) - 1:
+        head, rest = BROKEN.search(lines[i]), BROKEN_REST.match(lines[i + 1])
+        if head and rest and (head.group(1) + rest.group(1)).lower() in known:
+            lines[i] = lines[i][:head.end(1)] + rest.group(1) + rest.group(2)
+            if rest.group(3):
+                lines[i + 1] = rest.group(3)
+            else:
+                del lines[i + 1]
+        i += 1
+    return "\n".join(lines)
 
 
 def read_file(path: Path):
@@ -453,6 +493,19 @@ def read_url(url: str):
     return (read_text if ctype == "text/plain" else read_html)(text, stem)
 
 
+SITE_SUFFIX = re.compile(r"^(.*\S)\s+[-|\u2013\u2014]\s+(\S.*?)\s*$")
+SITE_MIN_PAGES = 2
+
+
+def strip_site_names(titles: list[str]) -> list[str]:
+    """Drop a trailing " - Site Name" (or " | ", en or em dash) from each page
+    title whose site name ends SITE_MIN_PAGES or more of the titles."""
+    found = [SITE_SUFFIX.match(t) for t in titles]
+    names = collections.Counter(m.group(2) for m in found if m)
+    return [m.group(1) if m and names[m.group(2)] >= SITE_MIN_PAGES else t
+            for t, m in zip(titles, found)]
+
+
 def read_urls(lines: list[str], skipped):
     """Yield (title, date, paragraphs, source) for each URL that is read."""
     fetched = 0
@@ -492,6 +545,31 @@ def _norm(line: str) -> str:
     return " ".join(line.lower().split())
 
 
+def _title_line(line: str) -> bool:
+    """A short line with most words capitalized and no sentence end: "Why Latency Matters"."""
+    words = [w for w in line.split() if w[0].isalpha()]
+    return (0 < len(line.split()) <= LABEL_TITLE_WORDS and bool(words) and words[0][0].isupper()
+            and 2 * sum(w[0].isupper() for w in words) >= len(words)
+            and not line.rstrip().endswith((".", "!", "?", ",", ";", ":")))
+
+
+def _section_label(paragraphs: list[str], i: int, j: int) -> bool:
+    """Line j of paragraph i is a bare "01" that labels the heading or short
+    title-cased line after it, and is not the first or last line of a page."""
+    lines = paragraphs[i].split("\n")
+    if not SECTION_LABEL.match(lines[j]):
+        return False
+    if j == 0 and i and paragraphs[i - 1] == PAGE_BREAK:
+        return False
+    if j + 1 < len(lines):
+        after = lines[j + 1]
+    elif i + 1 < len(paragraphs) and paragraphs[i + 1] != PAGE_BREAK:
+        after = paragraphs[i + 1].split("\n")[0]
+    else:
+        return False
+    return bool(HEADING.match(after) or _title_line(after))
+
+
 def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Counter):
     """Drop code, tables and chrome; (blocks of lines kept, words of chrome dropped).
 
@@ -501,7 +579,9 @@ def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Coun
     blocks: list[list[str]] = []
     chrome = 0
     fence = None
-    for p in paragraphs:
+    for i, p in enumerate(paragraphs):
+        if p == PAGE_BREAK:
+            continue
         lines = p.split("\n")
         if fence is None and markdown and all(INDENTED.match(l) for l in lines):
             counts["code"] += len(lines)
@@ -513,7 +593,7 @@ def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Coun
             continue
         table = any(TABLE_RULE.match(l) for l in lines)
         block: list[str] = []
-        for line in lines:
+        for j, line in enumerate(lines):
             m = FENCE.match(line)
             if fence is not None:
                 counts["code"] += 1
@@ -529,6 +609,7 @@ def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Coun
                       or (table and "|" in line)
                       else "link or image" if LINK_ONLY.match(line)
                       else "page number" if PAGE_NUMBER.match(line)
+                      and not _section_label(paragraphs, i, j)
                       else "contents line" if CONTENTS.search(line)
                       else "legal or site chrome" if LEGAL.search(line) else None)
             if reason is None:
@@ -649,7 +730,7 @@ def passages(paragraphs: list[str], min_words: int):
                 short += 1
     out = []
     for g in keep:
-        parts = [g[0][0]] if g[0][0] else []
+        parts = [HEADING_MARKS.sub("", g[0][0])] if g[0][0] else []
         parts += [u[1] for u in g]
         out.append(("\n\n".join(parts), words(g)))
     return out, short
@@ -801,7 +882,9 @@ def main() -> None:
     if args.urls:
         lines = [l.strip() for l in args.urls.read_text(encoding="utf-8-sig").splitlines()]
         lines = [l for l in lines if l and not l.startswith("#")]
-        docs.extend((*d, False) for d in read_urls(lines, skipped))
+        pages = list(read_urls(lines, skipped))
+        titles = strip_site_names([title for title, *_ in pages])
+        docs.extend((t, *d[1:], False) for t, d in zip(titles, pages))
     n_read = len(docs)
     if before:
         for d in docs:
