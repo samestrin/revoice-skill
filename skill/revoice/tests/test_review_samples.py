@@ -681,6 +681,8 @@ class RealRun(unittest.TestCase):
             "Our business model:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             "Our AI roadmap:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             "Groq pricing:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "A note to the AI:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
+            "Questions for the AI:\n\n" + FILLERS[0] + "\n\n" + FILLERS[1],
             # A paragraph that opens with a price is not a shell prompt.
             "$2,400 later, " + FILLERS[0] + " " + FILLERS[1] + "\n\n" + FILLERS[2],
             # A "...:" lead-in followed by sentences is not a quoted block.
