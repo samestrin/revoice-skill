@@ -99,6 +99,11 @@ Follow the voice profile as the authority on how the text should sound. Rules:
 - **Apply the profile's "Do not" list and pronoun rules strictly.**
 - **Markdown output:** one paragraph per line. Never hard-wrap prose.
 - **Final grammar pass.** Reread the rewrite once and fix grammar, spelling, and punctuation errors only. Do not change word choice, sentence length, or tone. Fragments the voice uses on purpose (e.g. "Thoughts?"), contractions, and its casual words are style, not errors.
+- **Check the rewrite.** Run the three check scripts on the plain rewrite:
+  - `mkdir -p ~/.config/revoice/check`, then Write the input text to `~/.config/revoice/check/original.txt` and the plain rewrite to `~/.config/revoice/check/rewrite.txt`. Overwrite both files every run; never the filled template — the filled template is not checked.
+  - Run `python3 "${CLAUDE_SKILL_DIR}/check/check-facts.py" --original ~/.config/revoice/check/original.txt --rewrite ~/.config/revoice/check/rewrite.txt`, `python3 "${CLAUDE_SKILL_DIR}/check/check-do-not.py" --voice <the voice file read in Step 3> --rewrite ~/.config/revoice/check/rewrite.txt` and `python3 "${CLAUDE_SKILL_DIR}/check/check-format.py" --rewrite ~/.config/revoice/check/rewrite.txt`. On Windows use `python` instead of `python3`, as Step 6 says.
+  - Fix only what the lines list: restore a `MISSING` fact, remove an `ADDED` one, replace a `BANNED` phrase, cut an `OVERUSED` phrase back to its cap, join wrapped lines (`HARD-WRAP`). Write the fixed rewrite to `rewrite.txt` again and run the checks once more. If a line is still listed, put it under "Notes" after the output (still 3 bullets at most).
+  - If a check script is absent or exits 2, name the script and the error under "Notes", skip that check and go on with the others. Do not stop.
 - If something in the input is ambiguous enough that a rewrite would have to guess (for example, who "we" refers to), make the safest choice and list it under "Notes" after the output. Keep notes to 3 bullets max, and skip the section if there is nothing to note.
 
 ## Step 5: Output

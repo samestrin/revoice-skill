@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `SKILL.md` Step 4 checks every rewrite in code after the final grammar pass: it writes the input and the plain rewrite to `~/.config/revoice/check/` and runs `check/check-facts.py`, `check/check-do-not.py` and `check/check-format.py`, fixes only what the lines list, then runs them once more. A line still listed is shown under "Notes" (3 bullets at most); a check script that is absent or exits 2 is named there with its error and skipped, and the rewrite goes on. The filled template is not checked.
+
 ### Fixed
 
 - README: the opt-in reference set is up to 148 emails from other senders, not 200; it is extracted with the same `--max-samples` cap as your samples. `test_readme_claims.py` pins the count to the script's default.
