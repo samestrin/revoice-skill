@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `build.md` phase 6 checks the voice file in code: after saving it, the build runs `check/check-voice.py --voice` on the saved file (or the `WORK/<slug>.md` copy), fixes what it lists, runs it again once, and tells you plainly if a line remains. A script that is absent or exits 2 is named with its error in the build report and the build goes on — the one exception to the stop-on-helper-failure rule. Phase 6 now also says the sections are `## ` headings with the exact listed text, as in the bundled `example.md`, which is what the check requires.
 - `SKILL.md` Step 4 checks every rewrite in code after the final grammar pass: it writes the input and the plain rewrite to `~/.config/revoice/check/` and runs `check/check-facts.py`, `check/check-do-not.py` and `check/check-format.py`, fixes only what the lines list, then runs them once more. A line still listed is shown under "Notes" (3 bullets at most); a check script that is absent or exits 2 is named there with its error and skipped, and the rewrite goes on. The filled template is not checked.
 
 ### Fixed

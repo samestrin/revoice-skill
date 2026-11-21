@@ -240,12 +240,12 @@ class BuildSourcesTest(unittest.TestCase):
 
 
 def voice_check_step(phase: str) -> str:
-    """The numbered phase 6 step that runs check-voice.py, up to the next step
-    or subsection."""
+    """The numbered phase 6 step that runs the check command (not step 2, which
+    only names the script), up to the next step or subsection."""
     for match in re.finditer(r"(?m)^\d+\. .*?(?=^\d+\. |^### |\Z)", phase, re.S):
-        if "check-voice.py" in match.group(0):
+        if "check-voice.py --voice" in match.group(0):
             return match.group(0)
-    raise AssertionError("phase 6 has no numbered step that runs check-voice.py")
+    raise AssertionError("phase 6 has no numbered step that runs check-voice.py --voice")
 
 
 class BuildVoiceCheckTest(unittest.TestCase):

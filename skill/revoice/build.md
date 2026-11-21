@@ -14,7 +14,7 @@ Rules for the whole build:
 - **Never read, print, or ask for the API key.** It lives in a key file (default `~/.config/revoice/api-key`). Only check that the file exists and is not empty (`test -s`). If the user pastes a key into the chat anyway, do not repeat it, and tell them it is now in the transcript and they may want a new key.
 - **Python:** use `python` if `python --version` reports Python 3.10 or newer, else `python3`. On Windows, `python3` is often a Microsoft Store shortcut; do not use it there.
 - **Long runs:** the helpers read big files one message at a time. If the mbox is over 500 MB, or the `--urls` list is long (one page a second), run the filter and extract steps in the background and wait for them to finish.
-- If a helper fails, show the last lines of its output and stop. Do not guess a workaround.
+- If a helper fails, show the last lines of its output and stop. Do not guess a workaround. The one exception is `check/check-voice.py` in phase 6: if it is absent or exits 2, name it and the error in the build report and go on, as phase 6 says.
 
 ## Phase 0: Check the setup
 
@@ -157,7 +157,7 @@ It sends the kept samples to the API at https://api.yourvoice.dev/ and can take 
 ## Phase 6: Write the voice file
 
 1. Read `voice-profile.json`. Its `meta.samples.voice_profile` lists the samples the profile was built from. Read those samples in full. The local review is rule-based and can miss things: set aside any kept sample that clearly is not the author's own voice or language, and do not learn from it when writing the voice file. Say so in your report, with how many you set aside and why. **The samples are the authority on how the author sounds; the JSON numbers are averages.** When they disagree, trust the samples.
-2. Write the voice file with these sections, in order, changed for the source as its subsection below says:
+2. Write the voice file with these sections, in order, changed for the source as its subsection below says. Each bold section name below is a `## ` heading with that exact text (the title stays a single `#`), as in the bundled `example.md` in the skill's `assets` folder; `check/check-voice.py` checks for those headings.
    - `# <Name>: Writing Profile`, then one short paragraph on what this file is and that samples beat stats.
    - **The voice in one paragraph.**
    - **Core traits:** 4 to 7 bullets, each with a short real example.
@@ -173,6 +173,7 @@ It sends the kept samples to the API at https://api.yourvoice.dev/ and can take 
 3. **Privacy in quotes.** The file may be shared. Skip quotes with other people's private details: money about third parties, disputes, health, family, client rates, or anything addressed by name to someone the user works with now. Pick another line that shows the same habit.
 4. One paragraph per line (never hard-wrap prose). No emojis.
 5. Save it to `~/.config/revoice/voices/<slug>.md` (`mkdir -p` the folder first). Never save it inside `SKILL`: an update replaces that folder. Claude Code may ask the user to approve the write; tell them to expect that prompt. If the write is blocked, save to `WORK/<slug>.md` instead and give them the exact copy command for their system.
+6. **Check the voice file.** Run `<python> SKILL/check/check-voice.py --voice ~/.config/revoice/voices/<slug>.md` (if step 5 saved to `WORK/<slug>.md` instead, check that path). It runs on this machine and prints one line per problem with the file's shape. Fix what it lists in the voice file, run it again once, and if a line remains, tell the user plainly which line and what it means. If the script is absent or exits 2, name the script and its error in the build report and go on: `check-voice.py` is the one exception to the stop-on-helper-failure rule above.
 
 ### Email
 
