@@ -171,6 +171,37 @@ class CheckDoNot(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(out, "")
 
+    def test_bullet_without_once_marker_caps_nothing(self):
+        voice = self.voice_file(
+            '# T: Writing Profile\n\n## Word choice\n\n'
+            '- "Plain words" reads well.\n\n'
+            '## Do not\n\n- Do not use "delve".\n')
+        result, out = self.run_check("Plain words here. Plain words again.", voice)
+        self.assertEqual(result, 0)
+        self.assertEqual(out, "")
+
+    def test_marker_line_that_is_not_a_bullet_caps_nothing(self):
+        voice = self.voice_file(
+            '# T: Writing Profile\n\n## Word choice\n\n'
+            '"Plain words": once per email at most.\n\n'
+            '## Do not\n\n- Do not use "delve".\n')
+        result, out = self.run_check("Plain words here. Plain words again.", voice)
+        self.assertEqual(result, 0)
+        self.assertEqual(out, "")
+
+    def test_capped_bullet_without_standin_marker_bans_nothing_extra(self):
+        voice = self.voice_file(
+            '# T: Writing Profile\n\n## Word choice\n\n'
+            '- "I think": once per email at most. "My take" is warmer.\n\n'
+            '## Do not\n\n- Do not use "delve".\n')
+        result, out = self.run_check("My take is yes. My take is no.", voice)
+        self.assertEqual(result, 0)
+        self.assertEqual(out, "")
+        # The cap itself still applies without a stand-in marker.
+        result, out = self.run_check("I think so. I think not.", voice)
+        self.assertEqual(result, 1)
+        self.assertEqual(out.splitlines(), ['OVERUSED "I think" x2 (max 1)'])
+
     def test_binary_rewrite_file_exits_2(self):
         voice_ok = self.voice_file(MIN_VOICE)
         path = self.tmp / "rewrite.txt"
@@ -219,7 +250,7 @@ class CheckDoNot(unittest.TestCase):
     def test_do_not_section_stops_at_next_heading(self):
         voice = self.voice_file(
             '# T: Writing Profile\n\n## Do not\n\n- Do not use "delve".\n\n'
-            '## Short examples\n\n- Offer: "seamless help is here."\n')
+            '## Short examples\n\n- Offer: "seamless".\n')
         result, out = self.run_check("The help is seamless.", voice)
         self.assertEqual(result, 0)
         self.assertEqual(out, "")
