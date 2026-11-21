@@ -382,5 +382,92 @@ class CommandNameTest(unittest.TestCase):
         self.assertRegex(frontmatter(), r"(?m)^name: revoice$")
 
 
+CHECK_SCRIPTS = ("check-facts.py", "check-do-not.py", "check-format.py")
+CHECK_FILES_DIR = "~/.config/revoice/check"
+
+
+def rewrite_check_block() -> str:
+    """The 'Check the rewrite' bullet (with its sub-bullets) in Step 4."""
+    match = re.search(r"^- \*\*Check the rewrite\.\*\*.*?(?=^- |\Z)", skill_step(4), re.M | re.S)
+    if not match:
+        raise AssertionError("SKILL.md Step 4 has no 'Check the rewrite' block")
+    return match.group(0)
+
+
+class RewriteCheckTest(unittest.TestCase):
+    """Step 4 runs the three rewrite checks in code (Epic 18 T5), after the
+    final grammar pass: fix what the lines list, run once more, and report
+    leftovers or a broken check under Notes without stopping."""
+
+    def test_step_4_names_all_three_scripts_under_the_skill_dir(self):
+        block = rewrite_check_block()
+        for script in CHECK_SCRIPTS:
+            with self.subTest(script=script):
+                self.assertIn(f'`python3 "{SKILL_DIR}/check/{script}"', block)
+
+    def test_each_named_check_script_exists_on_disk(self):
+        block = rewrite_check_block()
+        named = re.findall(rf"{re.escape(SKILL_DIR)}/check/([\w.-]+)", block)
+        self.assertEqual(sorted(set(named)), sorted(CHECK_SCRIPTS))
+        for script in named:
+            with self.subTest(script=script):
+                self.assertTrue((SKILL / "check" / script).is_file())
+
+    def test_block_comes_after_the_grammar_pass_and_before_step_5(self):
+        step = skill_step(4)
+        block = rewrite_check_block()
+        self.assertLess(step.index("Final grammar pass"), step.index(block))
+        self.assertLess(TEXT.index(block), TEXT.index("## Step 5"))
+
+    def test_writes_the_input_and_the_plain_rewrite_overwriting(self):
+        block = rewrite_check_block()
+        self.assertIn(f"`mkdir -p {CHECK_FILES_DIR}`", block)
+        self.assertIn(f"`{CHECK_FILES_DIR}/original.txt`", block)
+        self.assertIn(f"`{CHECK_FILES_DIR}/rewrite.txt`", block)
+        self.assertRegex(block, r"[Oo]verwrite")
+        self.assertIn("never the filled template", block)
+
+    def test_the_filled_template_is_not_checked(self):
+        self.assertIn("filled template is not checked", rewrite_check_block())
+
+    def test_check_flags_and_the_step_3_voice(self):
+        block = rewrite_check_block()
+        facts = re.search(r"check-facts\.py\"[^`]*", block).group(0)
+        self.assertIn("--original", facts)
+        self.assertIn("--rewrite", facts)
+        do_not = re.search(r"check-do-not\.py\"[^`]*", block).group(0)
+        self.assertIn("--voice", do_not)
+        self.assertIn("Step 3", do_not)
+        self.assertIn("--rewrite", do_not)
+        fmt = re.search(r"check-format\.py\"[^`]*", block).group(0)
+        self.assertIn("--rewrite", fmt)
+
+    def test_windows_uses_python_as_step_6_says(self):
+        block = rewrite_check_block()
+        self.assertRegex(block, r"Windows.*`python`")
+        self.assertIn("Step 6", block)
+
+    def test_fix_only_the_listed_lines_then_run_once_more(self):
+        block = rewrite_check_block()
+        self.assertIn("Fix only what the lines list", block)
+        self.assertRegex(block, r"restore a `MISSING` fact")
+        self.assertRegex(block, r"remove an `ADDED`")
+        self.assertRegex(block, r"replace a `BANNED` phrase")
+        self.assertRegex(block, r"join wrapped lines")
+        self.assertIn("once more", block)
+
+    def test_leftover_lines_go_under_notes_three_bullets_max(self):
+        block = rewrite_check_block()
+        self.assertRegex(block, r"still listed.*\"Notes\"")
+        self.assertRegex(block, r"3 bullets")
+
+    def test_missing_script_or_exit_2_goes_under_notes_and_does_not_stop(self):
+        block = rewrite_check_block()
+        self.assertRegex(block, r"absent or exits 2")
+        self.assertRegex(block, r"name the script and (its|the) error under \"Notes\"")
+        self.assertIn("skip that check and go on", block)
+        self.assertRegex(block, r"[Dd]o not stop")
+
+
 if __name__ == "__main__":
     unittest.main()
