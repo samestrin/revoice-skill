@@ -239,6 +239,69 @@ class BuildSourcesTest(unittest.TestCase):
         self.assertNotRegex(without_email(build_phase(2)), MBOX)
 
 
+def voice_check_step(phase: str) -> str:
+    """The numbered phase 6 step that runs the check command (not step 2, which
+    only names the script), up to the next step or subsection."""
+    for match in re.finditer(r"(?m)^\d+\. .*?(?=^\d+\. |^### |\Z)", phase, re.S):
+        if "check-voice.py --voice" in match.group(0):
+            return match.group(0)
+    raise AssertionError("phase 6 has no numbered step that runs check-voice.py --voice")
+
+
+class BuildVoiceCheckTest(unittest.TestCase):
+    """Phase 6 runs check/check-voice.py after saving the voice file (Epic 18 T6):
+    the sections are `## ` headings, fix what the check lists, run it again once,
+    and a missing or exit-2 script is named in the build report without stopping
+    (the one exception to the stop-on-helper-failure rule)."""
+
+    def test_phase_6_names_the_check_script_and_the_file_exists(self):
+        phase = build_phase(6)
+        self.assertIn("check/check-voice.py", phase)
+        named = re.findall(r"SKILL/(check/[\w.-]+)", phase)
+        self.assertEqual(sorted(set(named)), ["check/check-voice.py"])
+        for rel in set(named):
+            with self.subTest(script=rel):
+                self.assertTrue((SKILL / rel).is_file())
+
+    def test_phase_6_says_the_sections_are_level_two_headings(self):
+        phase = build_phase(6)
+        self.assertRegex(phase, r"`## ` heading")
+        self.assertIn("example.md", phase)
+
+    def test_the_check_step_comes_after_the_save_step(self):
+        phase = build_phase(6)
+        save = re.search(r"(?m)^5\. Save it", phase)
+        self.assertIsNotNone(save)
+        step = voice_check_step(phase)
+        self.assertLess(save.start(), phase.index(step))
+        self.assertLess(phase.index(step), phase.index("### Email"))
+
+    def test_the_command_checks_the_saved_file_or_the_work_copy(self):
+        step = voice_check_step(build_phase(6))
+        cmd = re.search(r"check-voice\.py[^`]*", step).group(0)
+        self.assertIn("--voice", cmd)
+        self.assertIn("~/.config/revoice/voices/<slug>.md", cmd)
+        self.assertIn("`WORK/<slug>.md`", step)
+
+    def test_fix_what_it_lists_run_again_once_report_leftovers(self):
+        step = voice_check_step(build_phase(6))
+        self.assertRegex(step, r"[Ff]ix what it lists")
+        self.assertRegex(step, r"again once|once more")
+        self.assertRegex(step, r"tell the user plainly")
+        self.assertRegex(step, r"line remains|still listed")
+
+    def test_missing_or_exit_2_is_named_in_the_report_and_the_build_goes_on(self):
+        step = voice_check_step(build_phase(6))
+        self.assertRegex(step, r"absent or exits 2")
+        self.assertRegex(step, r"name (it|the script) and (its|the) error in the build report")
+        self.assertRegex(step, r"go on")
+
+    def test_the_stop_rule_names_check_voice_as_the_one_exception(self):
+        rules = BUILD.split("## Phase 0:")[0]
+        self.assertRegex(rules, r"If a helper fails, show the last lines of its output and stop")
+        self.assertRegex(rules, r"one exception.*check-voice\.py")
+
+
 DESCRIPTION_LIMIT = 1024  # characters Claude allows in a skill's description
 
 
