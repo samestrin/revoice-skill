@@ -279,9 +279,24 @@ The skill keeps every fact, number, name and ask from the input. It does not add
 
 **Tuning.** To change how it writes, edit your voice file, for example by adding a line to its "Do not" section. To tune one audience, create `~/.config/revoice/voices/<slug>-formal.md` next to it with only the differences (for example "no idioms, sign off with Regards,"). It adds to your voice file rather than replacing it. Without one, the skill uses its own built-in steering for that audience.
 
+## Checks on every rewrite
+
+After Claude rewrites your text it runs three small checks on the rewrite, and the build runs a fourth on the voice file it writes. They run on your machine, with no network call, and use only Python's standard library:
+
+| Script | What it lists |
+|---|---|
+| `check/check-facts.py` | A number, date, URL or email address from your input that is missing from the rewrite, or one the rewrite adds. It catches numbers, dates, URLs and email addresses only: names and other facts are not checked. |
+| `check/check-do-not.py` | A phrase from your voice file's "Do not" section, or a phrase the voice allows once that the rewrite uses more often. |
+| `check/check-format.py` | A hard-wrap: prose broken across lines instead of one paragraph per line. |
+| `check/check-voice.py` | A problem in the voice file's shape when the build writes it: the title, the 11 sections in order, a filled "Do not" section, and no emoji. |
+
+Claude fixes only what the lines list and runs the checks once more. A line still listed is shown under "Notes" after the rewrite, not hidden. These checks catch only what code can: they cannot tell whether a rewrite sounds like you, and they cannot judge a name, a claim or a changed detail, so read the result as well.
+
 ## Running the steps by hand
 
 The helpers are in `skill/revoice/build/` and each has `--help`. For email the order is `mbox-filter-before.py`, `extract-samples.py` (again with `--others` for the reference set), `review-samples.py` (runs locally, no network or API key), then `build-profile.py`. For documents it is `extract-documents.py`, `review-samples.py --mode writing|brand`, then `build-profile.py --source-type writing|brand`. `skill/revoice/build.md` describes each step and the voice file format.
+
+The checks are in `skill/revoice/check/`, each with `--help` and no network call: `check-facts.py --original <file> --rewrite <file>`, `check-do-not.py --voice <voice file> --rewrite <file>`, `check-format.py --rewrite <file>`, and `check-voice.py --voice <voice file>`. Each prints one line per problem and exits 0 when it finds nothing, 1 when it lists a problem and 2 for bad arguments or an unreadable file. `SKILL.md` Step 4 and `build.md` phase 6 say when Claude runs them.
 
 ## Optional: SilverBullet
 

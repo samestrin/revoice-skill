@@ -396,5 +396,63 @@ class TestReadmeDocumentHelpers(unittest.TestCase):
         self.assertIn("extract-samples.py", self.section)
 
 
+class TestReadmeChecksOnEveryRewrite(unittest.TestCase):
+    """Epic 18: the README names the four checks and what they do not catch."""
+
+    SCRIPTS = ("check-facts.py", "check-do-not.py", "check-format.py", "check-voice.py")
+    CHECK_DIR = README.parent / "skill" / "revoice" / "check"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = README.read_text(encoding="utf-8")
+        start = cls.text.index("\n## Checks on every rewrite\n")
+        cls.start = start
+        end = cls.text.find("\n## ", start + 1)
+        cls.section = cls.text[start:end if end != -1 else len(cls.text)]
+
+    def test_section_follows_use_the_skill(self):
+        self.assertLess(self.text.index("\n## Use the skill\n"), self.start)
+        self.assertLess(self.start, self.text.index("\n## Running the steps by hand\n"))
+
+    def test_names_the_four_checks(self):
+        for name in self.SCRIPTS:
+            self.assertIn(name, self.section)
+
+    def test_each_named_check_file_exists(self):
+        for name in self.SCRIPTS:
+            self.assertTrue((self.CHECK_DIR / name).is_file(), f"no {name} on disk")
+
+    def test_runs_on_the_users_machine_with_no_network(self):
+        self.assertIn("on your machine", self.section)
+        self.assertIn("no network", self.section)
+
+    def test_says_what_each_check_catches(self):
+        self.assertIn("numbers, dates, URLs and email addresses only", self.section)
+        self.assertIn("Do not", self.section)
+        self.assertIn("hard-wrap", self.section.lower())
+        self.assertIn("voice file", self.section)
+
+    def test_says_what_they_do_not_catch(self):
+        self.assertIn("names", self.section)
+        self.assertIn("cannot tell whether a rewrite sounds like you", self.section)
+
+    def test_leftover_line_goes_under_notes(self):
+        self.assertIn("Notes", self.section)
+
+    def test_by_hand_section_names_the_four_checks(self):
+        start = self.text.index("## Running the steps by hand")
+        by_hand = self.text[start:self.text.index("\n## ", start + 1)]
+        for name in self.SCRIPTS:
+            self.assertIn(name, by_hand)
+        self.assertIn("skill/revoice/check/", by_hand)
+
+    def test_every_check_path_named_in_the_readme_exists(self):
+        named = set(re.findall(r"(check/[A-Za-z0-9_.-]+\.py)", self.text))
+        self.assertTrue(named, "the README names no check scripts")
+        for rel in named:
+            self.assertTrue((README.parent / "skill" / "revoice" / rel).is_file(),
+                            f"README names {rel}, which does not exist")
+
+
 if __name__ == "__main__":
     unittest.main()
