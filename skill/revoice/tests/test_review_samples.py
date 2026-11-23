@@ -867,6 +867,8 @@ class RealRun(unittest.TestCase):
             f"Export the report\n\nCurl up with it\n\n{f0}\n\n{f1}",
             # An equals sign inside prose, and a lowercase name=value.
             f"The ratio was X = 2 in every run we tried.\n\nretries=3 seemed fine to me\n\n{f0}",
+            # Short sentences that start with a command and hold no function word (Reviewer, PR #124).
+            "npm install failed.\ngit clone crashed.\npip install broke.\ndocker build failed.\n" + f0,
         ]
         for text in cases:
             for mode in rs.MODES:
@@ -886,7 +888,10 @@ class RealRun(unittest.TestCase):
         for line in ("I keep AI21_API_KEY= in a .env file.", "X = 2", "retries=3", "Export the report",
                      "npm install and then waited for the build to finish, which took",
                      "export of the old data to a new folder", "cd collection from the attic",
-                     "git is the tool I use every day.", "node", "Set A=1 first.", ""):
+                     "git is the tool I use every day.", "node", "Set A=1 first.", "",
+                     # Only the sentence end tells these from a command.
+                     "npm install failed.", "git clone crashed.", "pip install broke!",
+                     "docker build failed?"):
             with self.subTest(line):
                 self.assertFalse(rs.is_code(line))
 
