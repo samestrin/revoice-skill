@@ -184,7 +184,7 @@ class TestReadmeCost(unittest.TestCase):
 
     def test_examples(self):
         self.assertIn("1 + 30 + 0 + 30 = 61 credits", self.text)
-        self.assertIn("1 + 149 + 200 + 100 = 450 credits", self.text)
+        self.assertIn("1 + 148 + 148 + 100 = 397 credits", self.text)
 
     def test_default_fits_free_grant(self):
         self.assertIn("at most 148 samples, no reference set", self.text)
