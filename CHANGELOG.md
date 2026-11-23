@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - `extract-documents.py` keeps the text of an inline `<code>` element in HTML prose and drops only a `<pre>` code block (with any `<code>` inside it). In a real run, a dev.to sample read "With , she changes providers..." because the tool name `llm-env` in `<code>` was dropped with its text. Markdown inline code and DOCX code-styled runs already kept their text.
+- `review-samples.py --mode writing|brand` drops a passage (reason `quoted model output`) when over half of it is model answers under vendor headings such as `OpenAI Response` or `Small Model Responses (OpenAI)`, each up to the author's next heading. In the 0.3.1 real test, OpenAI, Claude and Gemini evaluations under such headings were kept and two went into the profile.
 
 ## [0.3.1] - 2026-11-21
 

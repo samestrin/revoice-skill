@@ -25,6 +25,7 @@ EXPECTED = [
     "prose_72faster_a.md", "prose_72faster_b.md",
     "prose_llmenv_a.md", "prose_llmenv_b.md",
     "llm_output_docx_a.md", "llm_output_docx_b.md", "llm_output_pdf_a.md",
+    "llm_output_docx_c.md", "llm_output_docx_d.md", "llm_output_pdf_b.md",
     "table_docx_numbers.md",
     "brand_icons_widgets.html",
     "copy_article_html.md", "copy_article_pdf.txt", "copy_article_docx.md",

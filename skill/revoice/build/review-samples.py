@@ -21,7 +21,8 @@ quoted, forwarded and header lines, unsubscribe boilerplate, and sign-off names.
 writing drops a passage whose first or
 last line is a byline ("By <Name>") naming someone other than --author; brand
 keeps every author. Both also drop quoted model output (a lead-in naming a model,
-a prompt or a response, then the answer; or mostly code-like lines) and table
+a prompt or a response, then the answer; answers under vendor headings such as
+"Small Model Responses (OpenAI)" over half the passage; or mostly code-like lines) and table
 text (mostly short lines, many of them numbers). Both print a coverage: line (KEEP
 passages, and the distinct source values among them), warn below the minimum in
 MINIMUMS, and exit with status 3 below the floor in FLOORS, after index.csv is
@@ -162,6 +163,13 @@ SHORT_BLOCK = 3
 SHORT_LINE_WORDS = 6
 SENTENCE_END = re.compile(r"[.!?][\"'\u201d)*_]*$")
 CODE_TOKEN = re.compile(r"^\s*(\$(?!\d)|>>>|\{|\[|import\b|def\b|curl\b)")
+# A vendor heading ("OpenAI Response", "Small Model Responses (OpenAI)") starts a model's
+# answer that runs to the next heading. The response word may be plural, and the model may
+# be named before it or in a "(Vendor)" suffix after it. When those answers are over half
+# the passage, under half is the author's own text and it is dropped.
+HEADING_RESPONSE_WORDS = RESPONSE_WORDS | frozenset(
+    "responses outputs answers replies completions".split())
+VENDOR_SUFFIX = re.compile(r"^(.*\S)\s*\(([^()]+)\)$")
 # Table text: share of lines with TABLE_CELL_WORDS words or fewer, and of mostly-digit lines.
 TABLE_CELL_WORDS = 3
 TABLE_SHORT_SHARE = 0.4
@@ -243,18 +251,76 @@ def is_lead_in(line: str) -> bool:
     if line.endswith(":"):
         return bool(MODEL_WORDS.search(line))
     *name, last = toks
-    return (last.lower() in RESPONSE_WORDS and bool(name)
-            and all(t[0].isupper() and t.lower() not in FUNCTION_WORDS for t in name)
+    return last.lower() in RESPONSE_WORDS and is_model_name(name)
+
+
+def is_model_name(name: list[str]) -> bool:
+    """Capitalised words that hold a model or vendor name, or end in MODEL_KINDS."""
+    return (bool(name) and all(t[0].isupper() and t.lower() not in FUNCTION_WORDS for t in name)
             and (name[-1].lower() in MODEL_KINDS
                  or any(t.lower() in MODEL_NAMES or t.lower().startswith("gpt") for t in name)))
 
 
+def is_vendor_heading(line: str) -> bool:
+    """A heading over a model's answer: "OpenAI Responses", "Small Model Responses (OpenAI)"."""
+    line = line.strip().strip("#*_ ").strip()
+    toks = line.split()
+    if not toks or len(toks) > LEAD_IN_WORDS or line[-1] in ".:;,!?":
+        return False
+    m = VENDOR_SUFFIX.match(line)
+    if m:
+        head = m.group(1).split()
+        return head[-1].lower() in HEADING_RESPONSE_WORDS and is_model_name(m.group(2).split())
+    *name, last = toks
+    return last.lower() in HEADING_RESPONSE_WORDS and is_model_name(name)
+
+
+def is_heading(line: str, alone: bool = False) -> bool:
+    """A short title-case line, or a markdown heading: it ends a vendor heading's section.
+    With alone (the line is its own paragraph), a sentence-case line is one too.
+
+    A pdftotext line wrap, a bold "Label:" or a list item inside the answer is none.
+    """
+    if line.lstrip().startswith("#"):
+        return True
+    if BULLET.search(line):
+        return False
+    line = line.strip().strip("*_ ").strip()
+    toks = line.split()
+    if not toks or len(toks) > LEAD_IN_WORDS or line[-1] in ".:;," or "," in line:
+        return False
+    caps = [t for t in (t.lstrip("(\"'“") for t in toks) if t and t[0].isalpha()]
+    if not caps or not caps[0][0].isupper():
+        return False
+    return alone or all(t[0].isupper() or t.lower() in FUNCTION_WORDS for t in caps)
+
+
+def vendor_section_words(text: str) -> int:
+    """Words under vendor headings (the headings too), each up to the next heading."""
+    raw = text.splitlines()
+    n, inside = 0, False
+    for k, l in enumerate(raw):
+        if not l.strip():
+            continue
+        alone = (k == 0 or not raw[k - 1].strip()) and (k + 1 == len(raw) or not raw[k + 1].strip())
+        if is_vendor_heading(l):
+            inside = True
+        elif is_heading(l, alone):
+            inside = False
+        if inside:
+            n += len(l.split())
+    return n
+
+
 def is_model_output(text: str) -> bool:
     """Quoted model output: after a lead-in, the answer is most of the passage; or a
-    "...:" lead-in followed by a block of short lines; or mostly code-like lines."""
+    "...:" lead-in followed by a block of short lines; or answers under vendor headings
+    are over half of it; or mostly code-like lines."""
     lines = lines_of(text)
     total = len(text.split())
     if sum(len(l.split()) for l in lines if CODE_TOKEN.search(l)) > total * MOSTLY:
+        return True
+    if vendor_section_words(text) > total * MOSTLY:
         return True
     for k, line in enumerate(lines):
         if not is_lead_in(line):
