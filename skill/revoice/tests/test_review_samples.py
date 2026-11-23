@@ -997,14 +997,46 @@ class Cuts(unittest.TestCase):
 
     def test_real_lead_in_marks_only_its_block(self):
         # Article 2 _04 (the author's conclusion) was DROP "quoted model output" on c64b04b.
+        # 0.3.3 (EST-8320): 8172045 still cut "What began as an experiment..." after the
+        # lead-in. The reader had dropped the quote, so only the lead-in is cut.
         for mode in DOCUMENT_MODES:
             with self.subTest(mode):
+                r = self.judge(REAL_LEAD_IN, mode)
                 self.assert_kept_without(
-                    self.judge(REAL_LEAD_IN, mode), ["Claude's summary captured the difference:"],
-                    ["Speed: Hybrid often faster", "The choice isn't between tools",
+                    r, ["Claude's summary captured the difference:"],
+                    ["What began as an experiment revealed something bigger: hybrid prompt",
+                     "Speed: Hybrid often faster", "The choice isn't between tools",
                      "Responsible use is essential."],
-                    "quoted model output")
+                    "orphan lead-in")
+                self.assertEqual(r["cut"], "orphan lead-in 5 words")
         self.assertFalse(rs.is_model_output(REAL_LEAD_IN))
+
+    def test_real_step_title_kept(self):
+        # 0.3.3 (EST-8320): on 8172045 the PDF line "Step 1. Checkout
+        # comparing-llm-api-performance" over "Clone the repository:" became a bare "Step 1.".
+        for text in (REAL_ENV_SHELL_MINORITY, REAL_ENV_SHELL_MINORITY.replace("\n", "\r\n")):
+            for mode in DOCUMENT_MODES:
+                with self.subTest(mode):
+                    self.assert_kept_without(
+                        self.judge(text, mode), ["Clone the repository:"],
+                        ["Step 1. Checkout comparing-llm-api-performance", "Step 4. Run The Tests"],
+                        "orphan lead-in")
+
+    def test_drop_lead_in_keeps_a_title_line(self):
+        cases = {
+            "Step 1. Checkout comparing-llm-api-performance\nClone the repository:":
+                ("Step 1. Checkout comparing-llm-api-performance", 3),
+            "Installing It\nRun this:": ("Installing It", 2),
+            # A wrapped sentence: the line before has an ordinary word, or the next is lowercase.
+            "It is short. To run it, clone the repository and install the\ndependencies:":
+                ("It is short.", 10),
+            "We read it. Then we asked\nClaude to compare:": ("We read it.", 6),
+            "We read it. Checkout tools\nlist them:": ("We read it.", 4),
+            "Common Commands:": ("", 2),
+        }
+        for text, want in cases.items():
+            with self.subTest(text):
+                self.assertEqual(rs.drop_lead_in(text), want)
 
     def test_lead_in_block_ends_at_the_blank_line(self):
         f0, f1, f2 = FILLERS
@@ -1056,6 +1088,70 @@ class Cuts(unittest.TestCase):
         self.assertTrue(rs.is_model_output(text))
         r = self.judge(text, "writing")
         self.assertEqual((r["verdict"], r["reason"]), ("DROP", "quoted model output"))
+
+    # 0.3.3 (EST-8320): a lead-in that only names a model marks the block after it only
+    # when the block looks quoted; one that says the model's words follow marks any block.
+    NAMING_LEAD_IN = "Claude's summary captured the difference:"
+    REAL_QUOTE = ('"The single-prompt plan looked professional and was 11x cheaper, but I '
+                  "couldn't actually deliver the feature using it. The hybrid prompt chaining "
+                  "plan cost more but gave me a roadmap I could immediately execute. The ROI "
+                  "became clear when I realized the hybrid approach eliminated three days of "
+                  'additional research and planning meetings."')
+
+    def test_quoted_block_after_a_naming_lead_in_is_cut(self):
+        # The quote as the PDF copy of article 2 carries it: no blockquote, just the marks.
+        blocks = {
+            "real quote": self.REAL_QUOTE,
+            "curly quote": "\u201cIt was faster and cheaper, and the plan was clear.\u201d",
+            "quote lines": "> It was faster and cheaper.\n> The plan was clear.",
+            "code line": "x = plan(tasks);",
+            "assistant opener": "Certainly! Here is a summary of the two plans you shared.",
+            "bold labels": "**Speed:** the hybrid plan was faster in most runs.",
+        }  # Short lines after a "...:" lead-in drop the whole passage (0.3.1, is_model_output).
+        for name, block in blocks.items():
+            text = f"{passage(9)}\n\n{self.NAMING_LEAD_IN}\n\n{block}\n\n{passage(10)}"
+            for mode in DOCUMENT_MODES:
+                with self.subTest(name, mode=mode):
+                    r = self.judge(text, mode)
+                    self.assertEqual((r["verdict"], r["text"]),
+                                     ("KEEP", f"{passage(9)}\n\n{passage(10)}"))
+                    self.assertIn("quoted model output", r["cut"])
+
+    def test_plain_block_after_a_naming_lead_in_is_kept(self):
+        f0 = FILLERS[0]
+        for lead_in in (self.NAMING_LEAD_IN, "Using GPT-4 for the summary:",
+                        "ChatGPT helped with the plan:", "## Claude's take:"):
+            text = f"{passage(9)}\n\n{lead_in}\n\n{f0}\n\n{passage(10)}"
+            with self.subTest(lead_in):
+                r = self.judge(text, "writing")
+                self.assertEqual((r["verdict"], r["text"]),
+                                 ("KEEP", f"{passage(9)}\n\n{f0}\n\n{passage(10)}"))
+                self.assertEqual(r["cut"], f"orphan lead-in {len(lead_in.split())} words")
+
+    def test_quoted_block_shapes(self):
+        self.assertFalse(rs.quoted_block([]))
+        for block in (["'90s hardware was slower, and I still remember the wait."],
+                      ["The plan was clear: ship it.", "Then we did."]):
+            with self.subTest(block):
+                self.assertFalse(rs.quoted_block(block))
+
+    def test_announcing_lead_in_still_marks_a_plain_block(self):
+        f0 = FILLERS[0]
+        for lead_in in ("Here is what ChatGPT said:", "The assistant's answer:", "Claude replied:",
+                        "GPT-4o's output:", "Gemini wrote back:"):
+            text = f"{passage(9)}\n\n{lead_in}\n\n{f0}\n\n{passage(10)}"
+            with self.subTest(lead_in):
+                r = self.judge(text, "writing")
+                self.assertEqual((r["verdict"], r["text"]),
+                                 ("KEEP", f"{passage(9)}\n\n{passage(10)}"))
+
+    def test_naming_lead_in_over_half_needs_a_quoted_block(self):
+        block = (passage(10) + " " + passage(11)).replace("\n\n", " ")
+        plain = f"{passage(9)}\n\n{self.NAMING_LEAD_IN}\n\n{block}"
+        self.assertFalse(rs.is_model_output(plain))
+        self.assertTrue(rs.is_model_output(plain.replace(block, f'"{block}"')))
+        self.assertTrue(rs.is_model_output(plain.replace(self.NAMING_LEAD_IN,
+                                                         "Here is what Claude said:")))
 
     def test_line_emptied_by_runs_is_a_cut(self):
         # Not one NAME=value line nor one command line, but a joined run of both.
