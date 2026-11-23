@@ -294,7 +294,8 @@ class IconAndWidgetTest(Base):
     def test_a_plain_pre_block_is_still_skipped(self):
         _, _, paragraphs = ed.read_html(
             "<p>Run this:</p><pre>$ npm install\n$ npm test\nPRE-TEXT</pre><p>Then this.</p>", "stem")
-        self.assertEqual(paragraphs, ["Run this:", "Then this."])
+        # 0.3.3: the lead-in goes with the block it introduced (OrphanLeadInTest).
+        self.assertEqual(paragraphs, ["Then this."])
 
 
 class InlineCodeTest(Base):
@@ -323,7 +324,7 @@ class InlineCodeTest(Base):
             "<p>Install it:</p><pre><code>$ npm install -g llm-env\nPRE-CODE</code></pre>"
             "<pre class=x><span><code>NESTED</code></span></pre><p>Then <code>run</code> it.</p>",
             "stem")
-        self.assertEqual(paragraphs, ["Install it:", "Then run it."])
+        self.assertEqual(paragraphs, ["Then run it."])
 
     def test_inline_code_in_a_heading_and_list_item(self):
         _, _, paragraphs = ed.read_html(
@@ -352,6 +353,74 @@ class InlineCodeTest(Base):
         path = self.write("doc.docx", buf.getvalue())
         _, _, paragraphs = ed.read_docx(path, "doc")
         self.assertEqual(paragraphs, ["With llm-env, she changes providers."])
+
+
+class OrphanLeadInTest(Base):
+    """0.3.3 (EST-8320): a "...:" lead-in whose code block, quote or table the reader
+    drops is dropped with it. The 0.3.2 re-test kept "Start using llm-env right away:"
+    and "Environment-aware deployment:" with nothing after them, and cut the author's
+    conclusion after "Claude's summary captured the difference:" in review. The two
+    fixtures are slices of the published dev.to HTML (articles 2815637 and 2799473,
+    fetched 2026-11-23) with the toolbar SVGs taken out."""
+
+    def test_real_llm_env_orphan_lead_ins_dropped(self):
+        _, _, paragraphs = ed.read_html(real_run("orphan_leadins_llmenv.html"), "stem")
+        text = "\n".join(paragraphs)
+        for gone in ("Start using llm-env right away:", "Provider‑specific optimization:",
+                     "Environment‑aware deployment:", "llm-env list", "openrouter2"):
+            self.assertNotIn(gone, text)
+        # A lead-in to a list the reader keeps is no orphan.
+        for kept in ("A single script that:", "Centralizes provider configuration",
+                     "Most AI tools already expect these variables:", "OPENAI_MODEL",
+                     "Security is a top priority:", "## Try It",
+                     "llm-env ships with 20 popular providers ready to go",
+                     "## Advanced Workflows (Examples)", "I wrote llm-env in Bash"):
+            self.assertIn(kept, text)
+
+    def test_real_lead_in_before_a_dropped_quote_dropped(self):
+        _, _, paragraphs = ed.read_html(real_run("leadin_72faster_quote.html"), "stem")
+        self.assertEqual(paragraphs[-3:], [
+            "Key Differentiators: Hybrid excelled in capacity planning, comprehensive risk "
+            "management, and actionable task breakdown",
+            "## Conclusion: The Intelligence Investment",
+            "What began as an experiment revealed something bigger: hybrid prompt chaining "
+            "delivers both higher quality and better performance across multiple dimensions."])
+
+    def test_only_the_last_sentence_goes(self):
+        for html, want in (
+                ("<p>It is short. Install it with:</p><pre>x</pre><p>Done.</p>",
+                 ["It is short.", "Done."]),
+                ("<p>We compared them, e.g. by speed vs. cost. The results:</p><table><tr><td>1"
+                 "</td></tr></table>", ["We compared them, e.g. by speed vs. cost."]),
+                ("<p>As she put it:</p><blockquote>QUOTE</blockquote><p>I agree.</p>", ["I agree."]),
+                ("<p>Run <em>this</em> <code>now</code>:</p><div><pre>x</pre></div>", []),
+                ("<p>**Steps:**</p><pre>x</pre>", [])):
+            with self.subTest(html):
+                self.assertEqual(ed.read_html(html, "stem")[2], want)
+
+    def test_a_lead_in_before_kept_text_or_other_drops_stays(self):
+        for html, want in (
+                ("<p>The plan:</p><ul><li>Ship it.</li></ul>", ["The plan:", "Ship it."]),
+                ("<p>The plan:</p><h2>Next</h2><pre>x</pre>", ["The plan:", "## Next"]),
+                ("<p>See below:</p><nav>NAV</nav><p>More.</p>", ["See below:", "More."]),
+                ("<p>Ratio 3:2 holds.</p><pre>x</pre>", ["Ratio 3:2 holds."]),
+                ("<pre>x</pre><p>First.</p>", ["First."])):
+            with self.subTest(html):
+                self.assertEqual(ed.read_html(html, "stem")[2], want)
+
+    def test_markdown_code_and_table_take_their_lead_in(self):
+        counts = collections.Counter()
+        text = ("Intro line. Install it with:\n\n```\nnpm i\n```\n\nRun this:\n```\nx\n```\n\n"
+                "The keys:\n\n    KEY=1\n\nThe table:\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n"
+                "Before the list:\n\n- one\n\nLast line.")
+        blocks, _ = ed.strip_markup(ed._paragraphs(text), True, counts)
+        self.assertEqual(blocks, [["Intro line."], ["Before the list:"], ["- one"], ["Last line."]])
+
+    def test_docx_table_takes_its_lead_in(self):
+        path = self.write("t.docx", docx_bytes(["We write plainly.", "Our rates, in short:"],
+                                               table="TABLE-TEXT"))
+        _, _, paragraphs = ed.read_docx(path, "t")
+        self.assertEqual(paragraphs, ["We write plainly."])
 
 
 class DocxReaderTest(Base):

@@ -1,0 +1,77 @@
+<html><head><title>Stop Juggling API Keys: Meet llm-env — One Command, Any LLM Provider</title></head>
+<body><article>
+<p>A single script that:</p>
+
+<ol>
+<li>Centralizes provider configuration in one place (~/.config/llm-env/llm-env.conf)</li>
+<li>Normalizes every provider to OPENAI_* environment variables</li>
+<li>Let's you switch providers instantly with <code>llm-env set &lt;provider&gt;</code>
+</li>
+<li>Includes a built-in connectivity test so you know your provider works</li>
+</ol>
+
+<p>Start using <code>llm-env</code> right away:<br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight shell"><code>llm-env list
+llm-env <span class="nb">set </span>openai
+llm-env <span class="nb">test </span>openai
+llm-env show
+</code></pre>
+</div>
+
+<h2>
+  Pre‑Configured for the Modern AI Stack
+</h2>
+
+<p><code>llm-env</code> ships with 20 popular providers ready to go and works with <strong>any OpenAI‑compatible API</strong>. You can easily add your own providers by editing a single config file.</p>
+
+<p>Most AI tools already expect these variables:</p>
+
+<ul>
+<li>OPENAI_API_KEY</li>
+<li>OPENAI_BASE_URL</li>
+<li>OPENAI_MODEL</li>
+</ul>
+
+<p>Security is a top priority:</p>
+
+<ul>
+<li>Keys live in environment variables—never written to config files</li>
+<li>Outputs are masked (e.g., ••••abcd) — see the llm-env show output for an example</li>
+<li>Switching is local; nothing is sent over the network except your own API calls during tests</li>
+</ul>
+
+<h2>
+  Advanced Workflows (Examples)
+</h2>
+
+<p>Provider‑specific optimization:<br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight shell"><code><span class="c"># Code generation and debugging</span>
+llm-env <span class="nb">set </span>deepseek
+<span class="c"># Real-time applications requiring speed</span>
+llm-env <span class="nb">set </span>groq
+</code></pre>
+</div>
+
+<p>Environment‑aware deployment:<br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight shell"><code><span class="c"># dev → staging → prod with different providers</span>
+llm-env <span class="nb">set </span>cerebras
+llm-env <span class="nb">set </span>openrouter2
+llm-env <span class="nb">set </span>openai
+</code></pre>
+</div>
+
+<h2>
+  Try It
+</h2>
+
+<p>I wrote <code>llm-env</code> in Bash so it runs anywhere Bash runs—macOS, Linux, containers, CI—without asking you to install Python or Node first. It’s intentionally compatible with older shells and includes shims for pre-4.0 behavior.</p>
+</article></body></html>
