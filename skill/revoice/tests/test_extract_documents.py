@@ -1124,6 +1124,15 @@ class OneDocumentTest(PassageBase):
         self.assertEqual(article, [("article-docx", 160), ("article-docx", 359),
                                    ("article-pdf", 411)])
 
+    def test_one_document_repeating_a_third_of_a_passage_keeps_both(self):
+        # COPY_SHARE is only between two sources: a document's own two passages
+        # sharing 0.29 (under DUPLICATE_SHARE) are distinct writing.
+        first = prose(300, "repeat").split()
+        self.write("x.md", " ".join(first) + "\n\n" + " ".join(first[:90] + prose(210, "on").split()))
+        run = self.run_script(self.docs)
+        self.assertEqual(len(run.rows), 2)
+        self.assertNotRegex(run.stdout, r"duplicate")
+
     def test_two_documents_sharing_two_fifths_of_a_passage_keep_both(self):
         # COPY_SHARE is only for copies of one document: a passage that quotes
         # 0.4 of another document's passage is still its own writing.
