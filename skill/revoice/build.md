@@ -80,7 +80,7 @@ Report: messages kept by the date filter, samples written, and the top drop reas
 <python> SKILL/build/extract-documents.py "<folder>" --urls <urls-file> --before <cutoff> -o samples
 ```
 
-Leave out `--urls` if there is no URL list, `"<folder>"` if there are only URLs, and `--before` unless the user gave a cutoff date. It splits each document into passages of about 350 words (one passage is one sample) and drops code, tables, navigation, footers, legal lines and duplicates.
+Leave out `--urls` if there is no URL list, `"<folder>"` if there are only URLs, and `--before` unless the user gave a cutoff date. It splits each document into passages of about 350 words (one passage is one sample) and drops code blocks, tables, navigation, footers, legal lines and duplicates.
 
 Report: documents read, documents skipped by reason, passages written, the top drop reasons, and how many were undated if a cutoff was given. If PDFs were skipped because `pdftotext` is missing, say so and offer the two ways out (install poppler, or save them as `.docx` or `.txt`). It keeps at most 148 passages, taken in turn from each document; if it reports passages over the cap, say how many were left out.
 

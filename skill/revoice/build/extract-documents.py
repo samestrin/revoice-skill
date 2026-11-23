@@ -8,7 +8,8 @@ and the pages listed in --urls:
   .md, .txt     UTF-8 text; a leading "---" front matter block gives
                 "title:" and "date:" and is then dropped
   .html, .htm   headings, paragraphs and list items; navigation, headers,
-                footers, scripts, code, tables, quotes and forms are dropped,
+                footers, scripts, code blocks (<pre>; inline <code> text is
+                kept), tables, quotes and forms are dropped,
                 and so are icon-font elements (material-symbols, material-icons,
                 fa-, bi-, icon- classes), anything aria-hidden="true", and a
                 terminal-style widget (a block of 3 or more lines, most of
@@ -202,8 +203,10 @@ def _hidden(attrs) -> bool:
 
 
 class _HTMLText(html.parser.HTMLParser):
+    # An inline <code> ("With <code>llm-env</code>, she ...") is prose and is
+    # kept; a code block is a <pre>, and a <code> inside it goes with it.
     SKIP = {"script", "style", "nav", "header", "footer", "aside", "form", "pre",
-            "code", "table", "figure", "blockquote", "template", "noscript", "svg"}
+            "table", "figure", "blockquote", "template", "noscript", "svg"}
     BLOCK = {"p", "li", "div", "section", "article", "main", "br", "ul", "ol",
              "dd", "dt", "body", "hr", "h1", "h2", "h3", "h4", "h5", "h6"}
     # Elements with no end tag: they hold no text and never open a drop.

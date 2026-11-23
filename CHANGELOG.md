@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `extract-documents.py` keeps the text of an inline `<code>` element in HTML prose and drops only a `<pre>` code block (with any `<code>` inside it). In a real run, a dev.to sample read "With , she changes providers..." because the tool name `llm-env` in `<code>` was dropped with its text. Markdown inline code and DOCX code-styled runs already kept their text.
+
 ## [0.3.1] - 2026-11-21
 
 ### Added
