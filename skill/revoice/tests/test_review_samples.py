@@ -591,6 +591,8 @@ REAL_PROSE = [real_run_body(f"prose_{n}.md") for n in (
     "comparing13_a", "comparing13_b", "72faster_a", "72faster_b", "llmenv_a", "llmenv_b")]
 REAL_LLM_OUTPUT = {n: real_run_body(f"{n}.md")
                    for n in ("llm_output_docx_a", "llm_output_docx_b", "llm_output_pdf_a")}
+REAL_VENDOR_SECTIONS = {n: real_run_body(f"{n}.md")
+                        for n in ("llm_output_docx_c", "llm_output_docx_d", "llm_output_pdf_b")}
 REAL_TABLE = real_run_body("table_docx_numbers.md")
 DOCUMENT_MODES = ("writing", "brand")
 
@@ -711,6 +713,95 @@ class RealRun(unittest.TestCase):
     def test_new_reasons_are_listed(self):
         self.assertIn("quoted model output", rs.REASONS)
         self.assertIn("table or numbers", rs.REASONS)
+
+    # 0.3.2 fix F1 (EST-8141): model answers under vendor headings such as
+    # "Small Model Responses (OpenAI)", with the author's own text around them.
+    def test_real_vendor_sections_dropped(self):
+        # docx_c and docx_d were KEEP 5 "own writing" on 9ed1577.
+        for mode in DOCUMENT_MODES:
+            for name, text in REAL_VENDOR_SECTIONS.items():
+                with self.subTest(mode=mode, passage=name):
+                    r = self.judge(text, mode)
+                    self.assertEqual((r["verdict"], r["reason"]), ("DROP", "quoted model output"))
+
+    def test_real_prose_kept_beside_vendor_sections(self):
+        texts = [*REAL_PROSE, *REAL_VENDOR_SECTIONS.values()]
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                out = rs.review(texts, "Sam Estrin", mode)[:len(REAL_PROSE)]
+                self.assertEqual([(o["verdict"], o["reason"]) for o in out],
+                                 [("KEEP", "own writing")] * len(REAL_PROSE))
+
+    def test_vendor_heading_sections_over_half_dropped(self):
+        f0, f1, f2 = FILLERS
+        cases = {
+            "two (Vendor) sections after the author": f"{f0}\n\nSmall Model Responses (OpenAI)\n\n"
+                                                      f"{f1}\n\nLarge Model Responses (Claude)\n\n{f2}",
+            "section, then the author's heading": f"Small Model Responses (Google Gemini)\n\n{f0}"
+                                                  f"\n\n{f1}\n\nThe Quality Of The Results\n\n{f2}",
+            "plural response word": f"{f2}\n\nGroq Responses\n\n{f0}\n\n{f1}",
+            "markdown heading": f"{f2}\n\n## Cloudflare AI Answers\n\n{f0}\n\n{f1}",
+        }
+        for name, text in cases.items():
+            for mode in DOCUMENT_MODES:
+                with self.subTest(name, mode=mode):
+                    r = self.judge(text, mode)
+                    self.assertEqual((r["verdict"], r["reason"]), ("DROP", "quoted model output"))
+
+    def test_vendor_heading_sections_under_half_kept(self):
+        f0, f1, f2 = FILLERS
+        cases = [
+            # A short answer, then the author's heading and text again.
+            f"{f0}\n\n{f1}\n\nOpenAI Response\n\nIt said latency matters for chat.\n\n"
+            f"What I Took From It\n\n{f2}",
+            # A "(Vendor)" suffix without a response word, or a response word without a vendor.
+            f"Pricing (OpenAI)\n\n{f0}\n\n{f1}",
+            f"Incident Responses (Q3)\n\n{f0}\n\n{f1}",
+            f"Customer Responses (Survey)\n\n{f0}\n\n{f1}",
+            f"Customer Responses\n\n{f0}\n\n{f1}",
+            f"How Did the LLM APIs Respond? (Small Models)\n\n{f0}\n\n{f1}",
+            # A sentence that names a vendor and responses is not a heading.
+            f"I read the OpenAI responses (Claude) again.\n\n{f0}\n\n{f1}",
+        ]
+        for text in cases:
+            for mode in DOCUMENT_MODES:
+                with self.subTest(text[:40], mode=mode):
+                    self.assertEqual(self.judge(text, mode)["verdict"], "KEEP")
+
+    def test_vendor_section_share_boundary(self):
+        # Exactly half the words under the heading keeps the passage; one more drops it.
+        author = "one two three four five six"
+        self.assertFalse(rs.is_model_output(f"{author}\nClaude Responses\nseven eight nine ten"))
+        self.assertTrue(rs.is_model_output(f"{author}\nClaude Responses\nseven eight nine ten eleven"))
+
+    def test_vendor_heading_lines(self):
+        # Real heading lines from the fixtures, and lines that must not count.
+        for line in ("Small Model Responses (OpenAI)", "Large Model Responses (Google Gemini)",
+                     "OpenAI Response", "AI21 Studio Response", "Cloudflare AI Response",
+                     "## Groq Responses", "**Small Model Responses (Claude)**"):
+            with self.subTest(line):
+                self.assertTrue(rs.is_vendor_heading(line))
+        for line in ("The Quality Of The Response Results", "Reka AI API Keys",
+                     "How Did the LLM APIs Respond? (Small Models)", "Incident Responses (Q3)",
+                     "Pricing (OpenAI)", "Customer Responses", "AI Incident Response",
+                     "Here is what ChatGPT said:", "I read the OpenAI responses (Claude) again.",
+                     "the CPU to access data stored in memory. This is crucial for improving"):
+            with self.subTest(line):
+                self.assertFalse(rs.is_vendor_heading(line))
+
+    def test_section_heading_lines(self):
+        # Lines that end a model answer, and lines inside one (pdftotext wraps, bold labels).
+        for line in ("The Quality Of The Response Results", "Reka AI API Keys",
+                     "How Did the LLM APIs Respond? (Small Models)", "## results", "Conclusion"):
+            with self.subTest(line):
+                self.assertTrue(rs.is_heading(line))
+        for line in ("**User Experience:**", "reasons:", "* Chatbots and virtual assistants",
+                     "1. **Real-time Applications**: LLMs with low latency are essential for",
+                     "Low latency Large Language Models (LLMs) are crucial for several",
+                     "Google Gemini, Anthropic, and Perplexity", "smartphones or embedded devices.",
+                     "harmless, and honest.", ""):
+            with self.subTest(line):
+                self.assertFalse(rs.is_heading(line))
 
 
 class CliContract(unittest.TestCase):
