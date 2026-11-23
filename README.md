@@ -41,7 +41,7 @@ cost = 1 + kept samples + reference emails + min(kept samples, 100)
 ```
 
 - A small mailbox with 30 kept samples and no reference set: 1 + 30 + 0 + 30 = 61 credits.
-- 149 kept samples plus 200 reference emails: 1 + 149 + 200 + 100 = 450 credits (add 1 for the key check).
+- 148 kept samples plus 148 reference emails: 1 + 148 + 148 + 100 = 397 credits (add 1 for the key check).
 
 A default build (at most 148 samples, no reference set) costs at most 1 + 148 + 100 = 249 credits, plus 1 for the key check: 250, exactly the free grant. The re-check before the build spends anything is the free `--estimate`. Adding the reference set costs more: one extra credit per reference email, so you need to buy a credit pack first if that takes the total over your balance. The build checks your balance before it spends and stops if it cannot cover the cost. The API's docs at https://api.yourvoice.dev/ list what each request costs.
 
