@@ -393,6 +393,9 @@ class OrphanLeadInTest(Base):
                 ("<p>We compared them, e.g. by speed vs. cost. The results:</p><table><tr><td>1"
                  "</td></tr></table>", ["We compared them, e.g. by speed vs. cost."]),
                 ("<p>As she put it:</p><blockquote>QUOTE</blockquote><p>I agree.</p>", ["I agree."]),
+                # "e.g." ends no sentence, so the whole lead-in goes, not half of it.
+                ("<p>Both work. Pick one e.g. npm:</p><pre>x</pre><p>Done.</p>",
+                 ["Both work.", "Done."]),
                 ("<p>Run <em>this</em> <code>now</code>:</p><div><pre>x</pre></div>", []),
                 ("<p>**Steps:**</p><pre>x</pre>", []),
                 # A <pre> inside the paragraph: the text after it goes on.
@@ -406,7 +409,9 @@ class OrphanLeadInTest(Base):
                 ("<p>The plan:</p><h2>Next</h2><pre>x</pre>", ["The plan:", "## Next"]),
                 ("<p>See below:</p><nav>NAV</nav><p>More.</p>", ["See below:", "More."]),
                 ("<p>Ratio 3:2 holds.</p><pre>x</pre>", ["Ratio 3:2 holds."]),
-                ("<pre>x</pre><p>First.</p>", ["First."])):
+                ("<pre>x</pre><p>First.</p>", ["First."]),
+                # A heading left unclosed before the block is a heading, not a lead-in.
+                ("<h2>Install:<pre>x</pre></h2><p>Then go.</p>", ["## Install:", "Then go."])):
             with self.subTest(html):
                 self.assertEqual(ed.read_html(html, "stem")[2], want)
 
