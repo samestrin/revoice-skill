@@ -28,8 +28,18 @@ passages, and the distinct source values among them), warn below the minimum in
 MINIMUMS, and exit with status 3 below the floor in FLOORS, after index.csv is
 written so the verdicts can be read.
 
-index.csv is replaced only after every sample was judged, so a failed run
-leaves it as it was. A rerun reviews every sample again.
+In writing and brand, a passage that passes is then cut before it is judged again:
+code, NAME=value and shell command lines (or runs of them inside a line), each
+model answer (from a vendor heading such as "OpenAI Response", found inside a
+joined PDF line too, to the next heading; or the paragraph after a lead-in), and
+a lead-in left with nothing after it ("Common Commands:"). Only the rest is
+judged and kept: the sample file is rewritten with it, its words column updated,
+and a cut column in index.csv says what was cut. Under MIN_REMAINDER_WORDS left,
+the passage is dropped for what was cut. Email samples are never cut.
+
+index.csv and the cut sample files are written only after every sample was
+judged, so a failed run leaves them as they were. A rerun reviews every sample
+again and keeps the cut note of a file it already cut.
 """
 from __future__ import annotations
 import argparse
@@ -42,6 +52,7 @@ from collections import Counter
 from pathlib import Path
 
 COLUMNS = ["verdict", "score", "reason"]
+CUT_COLUMN = "cut"  # writing and brand only
 
 KEEP_REASON = "own writing"
 REASONS = [KEEP_REASON, "broken extraction", "quoted or forwarded text",
@@ -134,9 +145,9 @@ CODE = re.compile(r"^(\t| {4})\s*\S|^\s*(def |class |import |from \S+ import |#i
 # a lowercase command word with at least one argument and no ordinary English word, so a
 # wrapped sentence that starts with one ("npm install and then waited for...") is prose.
 ENV_LINE = re.compile(r"""^\s*(export\s+)?([A-Z][A-Z0-9_]+=("[^"]*"|'[^']*'|\S*)(\s+|$))+$""")
-SHELL_LINE = re.compile(
-    r"^\s*(\$\s+)?(git|npm|npx|pnpm|yarn|pip3?|python3?|node|export|cd|curl|wget|docker|brew|"
-    r"sudo|mkdir|chmod)\s+\S")
+SHELL_COMMANDS = ("git npm npx pnpm yarn pip pip3 python python3 node export cd curl wget docker "
+                  "brew sudo mkdir chmod").split()
+SHELL_LINE = re.compile(r"^\s*(\$\s+)?(" + "|".join(SHELL_COMMANDS) + r")\s+\S")
 LOG = re.compile(
     r"^\s*\[?(\d{4}-\d\d-\d\d[ T]\d\d:\d\d|\d\d:\d\d:\d\d|"
     r"(TRACE|DEBUG|INFO|WARN(ING)?|ERROR|FATAL)\b)")
@@ -156,9 +167,9 @@ WORD = re.compile(r"[^\W\d_]+(?:['\u2019][^\W\d_]+)?")
 # response and answer are no model signal ("Incident Response", "The short answer:");
 # vendor names only count in a heading, so "Groq pricing:" or "Our AI roadmap:" is not a
 # lead-in, and a generic word only right before the response word ("AI Incident Response"
-# is an ordinary heading).
+# is an ordinary heading). "llm-env" is a tool, not a model.
 MODEL_WORDS = re.compile(
-    r"\b(chatgpt|claude|gpt[\w.-]*|gemini|llms?|the model|the prompt|"
+    r"\b(chatgpt|claude|gpt[\w.-]*|gemini|llms?(?!-)|the model|the prompt|"
     r"(model|assistant|bot|ai)(['\u2019]s)? (response|output|answer|reply|completion))\b", re.I)
 MODEL_NAMES = frozenset(
     "chatgpt claude gemini bard llm llama mistral mixtral openai anthropic cohere groq grok "
@@ -179,6 +190,21 @@ HEADING_RESPONSE_WORDS = RESPONSE_WORDS | frozenset(
     "responses outputs answers replies completions".split())
 VENDOR_SUFFIX = re.compile(r"^(.*\S)\s*\(([^()]+)\)$")
 # Table text: share of lines with TABLE_CELL_WORDS words or fewer, and of mostly-digit lines.
+# Cutting (writing and brand). A line is cut as code only on a sure sign: a NAME=value or
+# shell line, a code keyword start, or a brace end ("{", "}") or "...;" with "=" in it; a
+# wrapped prose line that ends in ";" or is indented stays. Inside a joined line, two or more
+# NAME=value settings in a row, or a shell command run (see shell_runs), are cut.
+CODE_START = re.compile(r"^\s*(def |class |import |from \S+ import |#include|\$ |```)")
+CODE_END = re.compile(r"(^\s*[{}]|[{}]\s*$)")
+ENV_RUN = re.compile(
+    r"""(?<!\S)(?:(?:export\s+)?[A-Z][A-Z0-9_]+=(?:"[^"]*"|'[^']*'|\S*)(?:\s+|$)){2,}""")
+# A token that ends a sentence or a label: what may come right before a marker or a command.
+BOUNDARY = re.compile(r"[.!?:)][\"'\u201d\u2019]*$")
+# A lead-in is the last sentence of its paragraph; "vs." and "e.g." end none.
+SENTENCE_BREAK = re.compile(r"[.!?][\"'\u201d\u2019)\]]*\s+")
+ABBREVIATIONS = frozenset("vs e.g i.e eg ie etc approx mr mrs ms dr st no".split())
+MIN_REMAINDER_WORDS = 60  # as SHORT_DOC_WORDS in extract-documents.py: less is no passage
+CUT_LABELS = {"model": "quoted model output", "code": "code", "orphan": "orphan lead-in"}
 TABLE_CELL_WORDS = 3
 TABLE_SHORT_SHARE = 0.4
 TABLE_DIGIT_SHARE = 0.25
@@ -252,10 +278,22 @@ def is_structured(text: str) -> bool:
 
 def is_code(line: str) -> bool:
     """A code line, a NAME=value setting or a shell command (see ENV_LINE, SHELL_LINE)."""
-    if CODE.search(line) or ENV_LINE.match(line):
-        return True
+    return bool(CODE.search(line) or ENV_LINE.match(line)) or is_shell(line)
+
+
+def is_shell(line: str) -> bool:
     return (bool(SHELL_LINE.match(line)) and not SENTENCE_END.search(line.strip())
             and not any(w in FUNCTION_WORDS for w in words(line)))
+
+
+def is_cut_code(line: str) -> bool:
+    """A line sure enough to be code to cut it (see CODE_START, CODE_END)."""
+    if ENV_LINE.match(line) or is_shell(line) or CODE_END.search(line):
+        return True
+    s = line.strip()
+    if CODE_START.match(line) or (s.endswith(";") and "=" in s):
+        return not any(w in FUNCTION_WORDS for w in words(line))
+    return False
 
 
 def is_lead_in(line: str) -> bool:
@@ -291,6 +329,54 @@ def is_vendor_heading(line: str) -> bool:
     return last.lower() in HEADING_RESPONSE_WORDS and is_model_name(name)
 
 
+def marker(line: str) -> tuple[int, int] | None:
+    """(start, end) of the first vendor heading inside a line ("... their responses. OpenAI
+    Response Low latency ..."): capitalised words that name a model before a capitalised
+    response word, or a "(Vendor)" after it. It starts the line or follows a BOUNDARY
+    token, and the answer after it starts with a capital, a digit or a quote."""
+    toks = [(m.start(), m.end(), m.group()) for m in re.finditer(r"\S+", line)]
+    for i, (_, _, tok) in enumerate(toks):
+        if tok.lower() not in HEADING_RESPONSE_WORDS or not tok[0].isupper():
+            continue
+        last = i
+        if i + 1 < len(toks) and toks[i + 1][2].startswith("("):
+            j = next((j for j in range(i + 1, min(i + 5, len(toks))) if toks[j][2].endswith(")")),
+                     None)
+            if j is not None and is_model_name(
+                    " ".join(t for _, _, t in toks[i + 1:j + 1])[1:-1].split()):
+                last = j
+        k = i
+        while (k > 0 and i - k < LEAD_IN_WORDS - 1 and toks[k - 1][2][0].isupper()
+               and toks[k - 1][2].lower() not in FUNCTION_WORDS
+               and not BOUNDARY.search(toks[k - 1][2])):
+            k -= 1
+        if last == i and not is_model_name([t for _, _, t in toks[k:i]]):
+            continue
+        if k > 0 and not BOUNDARY.search(toks[k - 1][2]):
+            continue
+        if last + 1 < len(toks) and not re.match(r"[A-Z0-9\"'\u201c\u2018*(]", toks[last + 1][2]):
+            continue
+        return toks[k][0], toks[last][1]
+    return None
+
+
+def marker_start(line: str) -> int | None:
+    m = marker(line)
+    return m[0] if m else None
+
+
+def split_markers(text: str) -> list[str]:
+    """The lines of text, with a vendor heading inside a line put on a line of its own."""
+    out = []
+    for line in text.splitlines():
+        m = marker(line)
+        if m and line[:m[0]].strip() + line[m[1]:].strip():
+            out += [p for p in (line[:m[0]].rstrip(), line[m[0]:m[1]], line[m[1]:].strip()) if p]
+        else:
+            out.append(line)
+    return out
+
+
 def is_heading(line: str, alone: bool = False) -> bool:
     """A short title-case line, or a markdown heading: it ends a vendor heading's section.
     With alone (the line is its own paragraph), a sentence-case line is one too.
@@ -313,8 +399,13 @@ def is_heading(line: str, alone: bool = False) -> bool:
 
 def vendor_section_words(text: str) -> int:
     """Words under vendor headings (the headings too), each up to the next heading."""
-    raw = text.splitlines()
-    n, inside = 0, False
+    raw = split_markers(text)
+    return sum(len(raw[k].split()) for k in vendor_lines(raw))
+
+
+def vendor_lines(raw: list[str]) -> list[int]:
+    """Indexes of the lines under vendor headings (the headings too)."""
+    out, inside = [], False
     for k, l in enumerate(raw):
         if not l.strip():
             continue
@@ -324,31 +415,168 @@ def vendor_section_words(text: str) -> int:
         elif is_heading(l, alone):
             inside = False
         if inside:
-            n += len(l.split())
-    return n
+            out.append(k)
+    return out
+
+
+def lead_in_block(raw: list[str], k: int) -> list[int]:
+    """Indexes of the block a lead-in at raw[k] introduces: the lines after it up to the
+    next blank line, or the next paragraph when a blank line follows it."""
+    j = k + 1
+    if j < len(raw) and not raw[j].strip():
+        while j < len(raw) and not raw[j].strip():
+            j += 1
+    block = []
+    while j < len(raw) and raw[j].strip():
+        block.append(j)
+        j += 1
+    return block
 
 
 def is_model_output(text: str) -> bool:
-    """Quoted model output: after a lead-in, the answer is most of the passage; or a
-    "...:" lead-in followed by a block of short lines; or answers under vendor headings
-    are over half of it; or mostly code-like lines."""
+    """Quoted model output: the block after a lead-in (see lead_in_block) is most of the
+    passage; or a "...:" lead-in followed by a block of short lines; or answers under
+    vendor headings are over half of it; or mostly code-like lines."""
     lines = lines_of(text)
     total = len(text.split())
     if sum(len(l.split()) for l in lines if CODE_TOKEN.search(l)) > total * MOSTLY:
         return True
     if vendor_section_words(text) > total * MOSTLY:
         return True
+    raw = text.splitlines()
+    for k, line in enumerate(raw):
+        if line.strip() and is_lead_in(line) and sum(
+                len(raw[j].split()) for j in lead_in_block(raw, k)) > total * MOSTLY:
+            return True
     for k, line in enumerate(lines):
         if not is_lead_in(line):
             continue
-        if sum(len(l.split()) for l in lines[k + 1:]) > total * MOSTLY:
-            return True
         block = lines[k + 1:k + 1 + SHORT_BLOCK]
         if (line.rstrip("*_ ").endswith(":") and len(block) == SHORT_BLOCK
                 and all(len(l.split()) <= SHORT_LINE_WORDS and not SENTENCE_END.search(l.strip())
                         for l in block)):
             return True
     return False
+
+
+def cut(text: str) -> tuple[str, Counter]:
+    """(what is left of a passage, words cut per CUT_LABELS key). Model answers, code
+    lines and code runs inside a line are cut, then the lead-ins they leave orphaned;
+    a cut run of lines leaves a paragraph break."""
+    raw = split_markers(text)
+    kind: list[str | None] = [None] * len(raw)
+    cuts: Counter = Counter()
+    for k in vendor_lines(raw):
+        kind[k] = "model"
+    for k, line in enumerate(raw):
+        if kind[k] is None and line.strip() and is_lead_in(line):
+            for j in [k, *lead_in_block(raw, k)]:
+                kind[j] = kind[j] or "model"
+    for k, line in enumerate(raw):
+        if kind[k] is None and line.strip():
+            if is_cut_code(line):
+                kind[k] = "code"
+            else:
+                raw[k], n, orphan = cut_runs(line)
+                cuts["code"] += n
+                cuts["orphan"] += orphan
+                if not raw[k].strip():
+                    kind[k] = "code"
+    for k, line in enumerate(raw):
+        if kind[k]:
+            cuts[kind[k]] += len(line.split())
+    # Paragraphs of what is left; None stands for a cut run.
+    paras: list[list[str] | None] = []
+    for k, line in enumerate(raw):
+        if kind[k]:
+            if paras[-1:] != [None]:
+                paras.append(None)
+        elif not line.strip():
+            if paras and paras[-1]:
+                paras.append([])
+        elif paras and paras[-1] is not None:
+            paras[-1].append(line)
+        else:
+            paras.append([line])
+    paras = [p for p in paras if p != []]
+    # Right to left: a lead-in before a cut, the end, or another lead-in is an orphan.
+    after_lead_in = True  # the end of the passage
+    for i in range(len(paras) - 1, -1, -1):
+        p = paras[i]
+        if p is None:
+            after_lead_in = True
+            continue
+        lead_in = p[-1].strip().strip("*_ ").endswith(":")
+        if lead_in and after_lead_in:
+            kept, n = drop_lead_in("\n".join(p))
+            cuts["orphan"] += n
+            paras[i] = kept.split("\n") if kept else []
+            lead_in = not kept  # the sentences before it stay, and they end in no ":"
+        after_lead_in = lead_in
+    if not +cuts:
+        return text, Counter()
+    rest = "\n\n".join("\n".join(p) for p in paras if p)
+    return rest.strip(), +cuts
+
+
+def cut_runs(line: str) -> tuple[str, int, int]:
+    """(line without its NAME=value and shell command runs, words cut, orphan lead-in words)."""
+    spans = [m.span() for m in ENV_RUN.finditer(line)] + shell_runs(line)
+    if not spans:
+        return line, 0, 0
+    n = orphan = 0
+    for a, b in sorted(spans, reverse=True):
+        n += len(line[a:b].split())
+        before = line[:a].rstrip()
+        if before.endswith(":"):
+            before, o = drop_lead_in(before)
+            orphan += o
+        line = (before + " " + line[b:].lstrip()).strip()
+    return line, n, orphan
+
+
+def shell_runs(line: str) -> list[tuple[int, int]]:
+    """Spans of shell commands inside a line: a command word after a BOUNDARY token (or with
+    a path, URL or flag as its first argument), up to the next capitalised word, with at
+    least one argument, no ordinary English word and no sentence end."""
+    toks = [(m.start(), m.end(), m.group()) for m in re.finditer(r"\S+", line)]
+    out, i = [], 0
+    while i < len(toks):
+        if toks[i][2] not in SHELL_COMMANDS or i + 1 == len(toks):
+            i += 1
+            continue
+        arg = toks[i + 1][2]
+        if not (i == 0 or BOUNDARY.search(toks[i - 1][2]) or arg.startswith("-")
+                or re.search(r"\w[./]\w", arg)):
+            i += 1
+            continue
+        j = i + 1
+        while j < len(toks) and not toks[j][2][0].isupper():
+            j += 1
+        run = line[toks[i][0]:toks[j - 1][1]]
+        if j - i >= 2 and not SENTENCE_END.search(run) and not any(
+                w in FUNCTION_WORDS for w in words(run)):
+            out.append((toks[i][0], toks[j - 1][1]))
+            i = j
+        else:
+            i += 1
+    return out
+
+
+def drop_lead_in(text: str) -> tuple[str, int]:
+    """(text without its last sentence, the words of that sentence)."""
+    start = 0
+    for m in SENTENCE_BREAK.finditer(text):
+        word = text[:m.start()].split()[-1].lower() if text[:m.start()].split() else ""
+        if word.strip("(\"'") not in ABBREVIATIONS:
+            start = m.end()
+    return text[:start].rstrip(), len(text[start:].split())
+
+
+def cut_note(cuts: Counter) -> str:
+    """The cut column: "quoted model output 87 words; code 54 words" (empty if nothing)."""
+    return "; ".join(f"{label} {cuts[k]} word{'' if cuts[k] == 1 else 's'}"
+                     for k, label in CUT_LABELS.items() if cuts[k])
 
 
 def is_table(text: str) -> bool:
@@ -488,33 +716,44 @@ def review(texts: list[str], author: str = "", mode: str = "email") -> list[dict
     email = mode == "email"
     dups = find_duplicates(texts)
     language = author_language(texts)
+
+    def judge(t: str, i: int) -> str:
+        if is_broken(t):
+            return "broken extraction"
+        if email and is_quoted(t):
+            return "quoted or forwarded text"
+        if is_structured(t):
+            return "list, table, code or log"
+        if not email and is_table(t):
+            return "table or numbers"
+        if not email and is_model_output(t):
+            return "quoted model output"
+        if is_garbled(t):
+            return "broken extraction"
+        if i in dups:
+            return "form letter"
+        if (language and len(words(t)) >= MIN_LANGUAGE_WORDS
+                and language_share(t, language) < LANGUAGE_SHARE):
+            return "not in the author's language"
+        if email and other_name(t, author):
+            return "written in another name"
+        if mode == "writing" and not_author(byline_name(t), author):
+            return "written by someone else"
+        return KEEP_REASON
+
     out = []
     for i, t in enumerate(texts):
-        if is_broken(t):
-            reason = "broken extraction"
-        elif email and is_quoted(t):
-            reason = "quoted or forwarded text"
-        elif is_structured(t):
-            reason = "list, table, code or log"
-        elif not email and is_table(t):
-            reason = "table or numbers"
-        elif not email and is_model_output(t):
-            reason = "quoted model output"
-        elif is_garbled(t):
-            reason = "broken extraction"
-        elif i in dups:
-            reason = "form letter"
-        elif (language and len(words(t)) >= MIN_LANGUAGE_WORDS
-              and language_share(t, language) < LANGUAGE_SHARE):
-            reason = "not in the author's language"
-        elif email and other_name(t, author):
-            reason = "written in another name"
-        elif mode == "writing" and not_author(byline_name(t), author):
-            reason = "written by someone else"
-        else:
-            reason = KEEP_REASON
+        reason, text, cuts = judge(t, i), t, Counter()
+        if reason == KEEP_REASON and not email:
+            text, cuts = cut(t)
+            if (cuts["model"] or cuts["code"]) and len(text.split()) < MIN_REMAINDER_WORDS:
+                reason = ("quoted model output" if cuts["model"] >= cuts["code"]
+                          else "list, table, code or log")
+            elif cuts:
+                reason = judge(text, i)
         out.append({"verdict": "KEEP" if reason == KEEP_REASON else "DROP",
-                    "score": score(t), "reason": reason})
+                    "score": score(text), "reason": reason, CUT_COLUMN: cut_note(cuts),
+                    "text": text})
     return out
 
 
@@ -537,19 +776,24 @@ def main() -> None:
     if not rows:
         sys.exit(f"error: no samples in {index}")
 
-    verdicts = review([body(args.samples / r["file"]) for r in rows], args.author, args.mode)
+    texts = [body(args.samples / r["file"]) for r in rows]
+    verdicts = review(texts, args.author, args.mode)
 
-    fields += [c for c in COLUMNS if c not in fields]
-    fd, tmp = tempfile.mkstemp(dir=args.samples, prefix="index.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=fields)
-            w.writeheader()
-            w.writerows({**r, **v} for r, v in zip(rows, verdicts))
-        os.replace(tmp, index)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    columns = COLUMNS + ([] if args.mode == "email" else [CUT_COLUMN])
+    fields += [c for c in columns if c not in fields]
+    cut_files = []
+    for r, v, t in zip(rows, verdicts, texts):
+        if v["verdict"] == "KEEP" and v["text"] != t:
+            cut_files.append((args.samples / r["file"], v["text"]))
+            if "words" in r:
+                r["words"] = str(len(v["text"].split()))
+        elif not v[CUT_COLUMN] and r.get(CUT_COLUMN):
+            v[CUT_COLUMN] = r[CUT_COLUMN]  # a file cut on an earlier run
+    for path, text in cut_files:
+        title = path.read_text(encoding="utf-8").partition("\n")[0]
+        replace_file(path, f"{title}\n\n{text}\n")
+    rows = [{**r, **{c: v[c] for c in columns}} for r, v in zip(rows, verdicts)]
+    replace_file(index, rows=rows, fields=fields)
     keep = sum(v["verdict"] == "KEEP" for v in verdicts)
     print(f"reviewed {len(rows)} samples: {keep} KEEP, {len(rows) - keep} DROP")
     drops = Counter(v["reason"] for v in verdicts if v["verdict"] == "DROP")
@@ -557,6 +801,24 @@ def main() -> None:
         print(f"  dropped {n}: {reason}")
     if args.mode in FLOORS:
         check_coverage(args.mode, keep, documents(rows, verdicts))
+
+
+def replace_file(path: Path, text: str = "", rows: list[dict] | None = None,
+                 fields: list[str] | None = None) -> None:
+    """Write text, or rows as CSV, to a temp file beside path, then move it over path."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.stem + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", newline="", encoding="utf-8") as f:
+            if rows is None:
+                f.write(text)
+            else:
+                w = csv.DictWriter(f, fieldnames=fields)
+                w.writeheader()
+                w.writerows(rows)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def documents(rows: list[dict], verdicts: list[dict]) -> int:

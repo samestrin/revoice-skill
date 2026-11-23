@@ -896,6 +896,13 @@ class RealRun(unittest.TestCase):
                 self.assertFalse(rs.is_code(line))
 
 
+# EST-8273, the 0.3.2 re-test on c64b04b (real_run/README.md is at its word cap, so the
+# provenance is here). leadin_72faster_04.md (article 2 _04, DROP "quoted model output") and
+# orphan_llmenv_01.md (_01) are verbatim c64b04b passages of the --urls copies, fetched again.
+# The operator's PDF is not in the evidence, so two are rebuilt from the published article
+# in the PDF's shape: llm_output_pdf_joined.md (_11: llm_output_pdf_b.md's text and the FAQ
+# before it, joined into one line as split_paragraph writes a long pdftotext paragraph) and
+# env_shell_pdf_minority.md (_10: the setup section, code lines under half the lines).
 REAL_JOINED_RESPONSE = real_run_body("llm_output_pdf_joined.md")
 REAL_ENV_SHELL_MINORITY = real_run_body("env_shell_pdf_minority.md")
 REAL_LEAD_IN = real_run_body("leadin_72faster_04.md")
@@ -911,7 +918,7 @@ class Cuts(unittest.TestCase):
 
     def judge(self, text, mode):
         # Not REAL_PROSE: prose_llmenv_a is the 0.3.0 copy of REAL_ORPHANS (a form letter).
-        return rs.review([text, *FILLERS, *(passage(i) for i in range(6))], "Sam Estrin", mode)[0]
+        return rs.review([text, *(passage(i) for i in range(6))], "Sam Estrin", mode)[0]
 
     def assert_kept_without(self, r, gone, kept, cut_label):
         self.assertEqual((r["verdict"], r["reason"]), ("KEEP", "own writing"))
@@ -1024,6 +1031,9 @@ class Cuts(unittest.TestCase):
         r = self.judge(text, "writing")
         self.assertEqual(r["text"], f"{f0} {f1}\n\nIt is short.\n\n{FILLERS[2]}")
         self.assertIn("orphan lead-in", r["cut"])
+        # The sentence before a dropped lead-in stays, so the line above it is no orphan.
+        text = text.replace("It is short.", "First, the steps:\n\nIt is short.")
+        self.assertIn("First, the steps:\n\nIt is short.\n\n", self.judge(text, "writing")["text"])
 
     def test_short_remainder_dropped(self):
         # Answers under half the passage are cut; the rest must reach MIN_REMAINDER_WORDS.
@@ -1047,6 +1057,10 @@ class Cuts(unittest.TestCase):
             for text, r in zip(REAL_PROSE, out):
                 with self.subTest(text[:30], mode=mode):
                     self.assertEqual((r["verdict"], r["cut"], r["text"]), ("KEEP", "", text))
+
+    def test_nothing_cut_leaves_the_text_as_it_is(self):
+        text = "First line.  \n\n\n\nSecond paragraph,\n  indented.\n" + passage(9)
+        self.assertEqual(rs.cut(text), (text, rs.Counter()))
 
     def test_email_mode_cuts_nothing(self):
         for text in (REAL_ENV_SHELL_MINORITY, REAL_LEAD_IN, REAL_ORPHANS):

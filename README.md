@@ -220,7 +220,7 @@ Point the build at a folder (or single files) of your own articles, posts or ess
 
 You can also give a `--urls` list: a text file with one `http` or `https` URL per line, for pages you own. Your machine fetches the pages one at a time; the build never follows links.
 
-Each document is split into passages of about 350 words (150 to 500), never cutting a paragraph; code blocks, tables, navigation, footers, legal lines and duplicates are dropped, and the review on your machine also drops quoted AI model output (a model's answer pasted into the document) and one-cell-per-line table text. One passage is one sample. At most 148 passages are kept, taken in turn from each document.
+Each document is split into passages of about 350 words (150 to 500), never cutting a paragraph; code blocks, tables, navigation, footers, legal lines and duplicates are dropped, and the review on your machine also drops quoted AI model output (a model's answer pasted into the document) and one-cell-per-line table text. When a passage is mostly your own writing, the review cuts the code lines, model answers and the lead-ins left with nothing after them out of it instead, and only the rest is kept and sent; the `cut` column of `samples/index.csv` says what was cut. One passage is one sample. At most 148 passages are kept, taken in turn from each document.
 
 Claude asks for your name and two confirmations: that this is your own writing, not AI-assisted, and that you may send it to the text analysis API and to Claude. A cutoff date is optional and only checks a `date:` in a document's front matter; undated documents are kept.
 
