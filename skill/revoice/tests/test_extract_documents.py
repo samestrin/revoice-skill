@@ -184,7 +184,7 @@ class HtmlReaderTest(Base):
         self.assertEqual(row["date"], "undated")
         self.assertEqual(run.text("page.html"),
                          "# Spring & Seeds\n\nSpring planting\n\nSeeds go in when the soil is warm.\n\n"
-                         "Peas first\n\nBeans later\n\nWater daily.\n")
+                         "Peas first\n\nBeans later\n\nWater CODE-TEXT daily.\n")
 
     def test_an_unclosed_heading_ends_at_the_next_block(self):
         title, _, paragraphs = ed.read_html(
@@ -295,6 +295,63 @@ class IconAndWidgetTest(Base):
         _, _, paragraphs = ed.read_html(
             "<p>Run this:</p><pre>$ npm install\n$ npm test\nPRE-TEXT</pre><p>Then this.</p>", "stem")
         self.assertEqual(paragraphs, ["Run this:", "Then this."])
+
+
+class InlineCodeTest(Base):
+    """F3: an inline <code> was dropped with its text, leaving a hole in the
+    sentence (Epic 19.1, EST-8143). A <pre> block is still dropped whole."""
+
+    def test_real_run_inline_code_keeps_its_text(self):
+        # The real 0.3.0 sample read "With , she changes providers ..." (see
+        # fixtures/real_run/prose_llmenv_a.md): dev.to writes the tool's name in <code>.
+        _, _, paragraphs = ed.read_html(
+            "<p>Sarah, an ML engineer at a fintech startup, prototypes using the Gemini free "
+            "tier, uses Groq for CI speed, and ships with OpenAI in production. With "
+            "<code>llm-env</code>, she changes providers with a single command and avoids "
+            "configuration drift across environments.</p>"
+            "<p>Use <code>llm-env list</code> to locate the providers you have keys for.</p>",
+            "stem")
+        self.assertEqual(paragraphs, [
+            "Sarah, an ML engineer at a fintech startup, prototypes using the Gemini free tier, "
+            "uses Groq for CI speed, and ships with OpenAI in production. With llm-env, she "
+            "changes providers with a single command and avoids configuration drift across "
+            "environments.",
+            "Use llm-env list to locate the providers you have keys for."])
+
+    def test_code_inside_pre_is_still_dropped(self):
+        _, _, paragraphs = ed.read_html(
+            "<p>Install it:</p><pre><code>$ npm install -g llm-env\nPRE-CODE</code></pre>"
+            "<pre class=x><span><code>NESTED</code></span></pre><p>Then <code>run</code> it.</p>",
+            "stem")
+        self.assertEqual(paragraphs, ["Install it:", "Then run it."])
+
+    def test_inline_code_in_a_heading_and_list_item(self):
+        _, _, paragraphs = ed.read_html(
+            "<h2>Meet <code>llm-env</code></h2><ul><li>Set <code>OPENAI_API_KEY</code> once</li></ul>",
+            "stem")
+        self.assertEqual(paragraphs, ["## Meet llm-env", "Set OPENAI_API_KEY once"])
+
+    def test_markdown_inline_code_keeps_its_text(self):
+        self.write("post.md", "With `llm-env`, she changes providers.\n\n"
+                              "```\nFENCED-CODE\n```\n\nUse `llm-env list` to locate keys.\n")
+        run = self.run_script(self.docs)
+        self.assertEqual(run.text("post.md"),
+                         "# post\n\nWith `llm-env`, she changes providers.\n\n"
+                         "Use `llm-env list` to locate keys.\n")
+
+    def test_docx_code_styled_run_keeps_its_text(self):
+        # Word marks inline code only with a run style or font; the reader keeps every run.
+        w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        xml = (f'<w:document {w}><w:body><w:p><w:r><w:t xml:space="preserve">With </w:t></w:r>'
+               '<w:r><w:rPr><w:rStyle w:val="HTMLCode"/><w:rFonts w:ascii="Courier New"/></w:rPr>'
+               '<w:t>llm-env</w:t></w:r><w:r><w:t>, she changes providers.</w:t></w:r></w:p>'
+               '</w:body></w:document>')
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("word/document.xml", xml)
+        path = self.write("doc.docx", buf.getvalue())
+        _, _, paragraphs = ed.read_docx(path, "doc")
+        self.assertEqual(paragraphs, ["With llm-env, she changes providers."])
 
 
 class DocxReaderTest(Base):
