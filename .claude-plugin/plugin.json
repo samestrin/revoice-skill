@@ -1,6 +1,6 @@
 {
   "name": "revoice",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Rewrite text so it reads like a specific person wrote it, using a local voice profile. /revoice rewrites, --sync pulls voices from SilverBullet, --build builds a voice from an email export, a folder of your own writing, or a folder of brand documents.",
   "author": {
     "name": "Sam Estrin",

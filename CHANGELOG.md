@@ -5,8 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-23
+
 ### Fixed
 
+- README: the second credit example is now achievable: 148 kept samples plus 148 reference emails cost 1 + 148 + 148 + 100 = 397 credits (add 1 for the key check). The old example used 149 kept samples and 200 reference emails, more than the extractor's 148 cap for either set, so no build could reach it. `test_readme_claims.py` pins the new figure.
 - `extract-documents.py` keeps the text of an inline `<code>` element in HTML prose and drops only a `<pre>` code block (with any `<code>` inside it). In a real run, a dev.to sample read "With , she changes providers..." because the tool name `llm-env` in `<code>` was dropped with its text. Markdown inline code and DOCX code-styled runs already kept their text.
 - `review-samples.py --mode writing|brand` drops a passage (reason `quoted model output`) when over half of it is model answers under vendor headings such as `OpenAI Response` or `Small Model Responses (OpenAI)`, each up to the author's next heading. In the 0.3.1 real test, OpenAI, Claude and Gemini evaluations under such headings were kept and two went into the profile.
 - `review-samples.py` counts `NAME=value` setting lines (`AI21_API_KEY=`, `export DEBUG=1`) and shell command lines (`git clone …`, `cd …`, `npm install`, `pip install …`, `curl …`) as code, so a passage that is mostly these lines is dropped as `list, table, code or log`. A wrapped sentence that starts with a command word ("npm install and then waited for…") and a sentence that names a variable are still prose. In the 0.3.1 real test, a PDF setup section with 13 API key lines and the git and npm commands had lost its code formatting and was kept.
