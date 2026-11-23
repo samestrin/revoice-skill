@@ -292,7 +292,8 @@ def is_cut_code(line: str) -> bool:
         return True
     s = line.strip()
     if CODE_START.match(line) or (s.endswith(";") and "=" in s):
-        return not any(w in FUNCTION_WORDS for w in words(line))
+        # The keyword itself ("from", "class") may be an ordinary word; the rest may not.
+        return not any(w in FUNCTION_WORDS for w in words(line)[1:])
     return False
 
 

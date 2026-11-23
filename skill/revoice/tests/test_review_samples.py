@@ -1035,6 +1035,35 @@ class Cuts(unittest.TestCase):
         text = text.replace("It is short.", "First, the steps:\n\nIt is short.")
         self.assertIn("First, the steps:\n\nIt is short.\n\n", self.judge(text, "writing")["text"])
 
+    def test_code_start_and_statement_lines_cut(self):
+        # A PDF that lost its formatting: code keyword starts and "...;" statements with "=".
+        for line in ("import os", "from pathlib import Path", "```", "x = load(path);",
+                     "def run():", "class Runner(Base):"):
+            with self.subTest(line):
+                self.assertTrue(rs.is_cut_code(line))
+        for line in ("import tariffs were the main cost", "class of the course was full",
+                     "it was fine; we moved on;", "the total = the sum of the parts;"):
+            with self.subTest(line):
+                self.assertFalse(rs.is_cut_code(line))
+        text = f"{passage(9)}\nimport os\nx = load(path);\n{passage(10)}"
+        r = self.judge(text, "writing")
+        self.assertEqual((r["verdict"], r["text"]), ("KEEP", f"{passage(9)}\n\n{passage(10)}"))
+        self.assertEqual(r["cut"], "code 5 words")
+
+    def test_lead_in_block_over_half_drops_the_passage(self):
+        block = (passage(10) + " " + passage(11)).replace("\n\n", " ")
+        text = f"{passage(9)}\n\nHere is what ChatGPT said:\n\n{block}"
+        self.assertTrue(rs.is_model_output(text))
+        r = self.judge(text, "writing")
+        self.assertEqual((r["verdict"], r["reason"]), ("DROP", "quoted model output"))
+
+    def test_line_emptied_by_runs_is_a_cut(self):
+        # Not one NAME=value line nor one command line, but a joined run of both.
+        text = f"{passage(9)}\n\nThen run it:\nOPENAI_API_KEY= GROQ_API_KEY= node run.js\n{passage(10)}"
+        r = self.judge(text, "brand")
+        self.assertEqual(r["text"], f"{passage(9)}\n\n{passage(10)}")
+        self.assertEqual(r["cut"], "code 4 words; orphan lead-in 3 words")
+
     def test_short_remainder_dropped(self):
         # Answers under half the passage are cut; the rest must reach MIN_REMAINDER_WORDS.
         def prose(n):
