@@ -47,6 +47,8 @@ METERED = ("/analyze/voice-profile", "/analyze/fingerprint")
 # The columns each step promises the next one.
 EXTRACT_COLUMNS = ["file", "date", "words", "subject"]
 REVIEW_COLUMNS = ["verdict", "score", "reason"]
+# Documents also get what was cut out of each passage (EST-8273); email samples are never cut.
+DOC_REVIEW_COLUMNS = REVIEW_COLUMNS + ["cut"]
 
 
 class FakeAPI(BaseHTTPRequestHandler):
@@ -384,7 +386,7 @@ class DocumentsEndToEndTest(EndToEndBase):
         review = self.run_helper("review-samples.py", "--samples", samples,
                                  "--mode", mode, "--author", author)
         columns, reviewed = self.read_index(samples)
-        self.assertEqual(columns, DOC_COLUMNS + REVIEW_COLUMNS)
+        self.assertEqual(columns, DOC_COLUMNS + DOC_REVIEW_COLUMNS)
         self.assertEqual([r["file"] for r in reviewed], [r["file"] for r in rows])
         kept = [r for r in reviewed if r["verdict"] == "KEEP"]
         self.assertGreaterEqual(len(kept), 20)  # above the minimum: no warning
@@ -519,7 +521,7 @@ class DocumentsEndToEndTest(EndToEndBase):
                 self.assertIn("below the floor", proc.stderr)
                 # index.csv is still written, so the verdicts can be read.
                 columns, reviewed = self.read_index(samples)
-                self.assertEqual(columns, DOC_COLUMNS + REVIEW_COLUMNS)
+                self.assertEqual(columns, DOC_COLUMNS + DOC_REVIEW_COLUMNS)
                 self.assertTrue(all(r["verdict"] == "KEEP" for r in reviewed))
         self.assertEqual(self.server.requests, [])
 
@@ -699,7 +701,7 @@ class RealRunEndToEndTest(EndToEndBase):
         review = self.run_helper("review-samples.py", "--samples", "samples",
                                  "--mode", "writing", "--author", REAL_AUTHOR)
         columns, reviewed = self.read_index("samples")
-        self.assertEqual(columns, DOC_COLUMNS + REVIEW_COLUMNS)
+        self.assertEqual(columns, DOC_COLUMNS + DOC_REVIEW_COLUMNS)
         self.assertEqual([r["file"] for r in reviewed], [r["file"] for r in rows])
         kept = [r for r in reviewed if r["verdict"] == "KEEP"]
         by_doc = Counter(r["source"] for r in kept)
