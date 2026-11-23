@@ -50,7 +50,9 @@ Anything else is skipped and counted. Then:
   - sources that are one document (a passage of one was a duplicate of the
     other's, or half of one's 5-grams are in the other) are named by one
     source in index.csv: the one with the longest passage. The report then
-    says how many of the documents read are distinct
+    says how many of the documents read are distinct. Between two sources of
+    one document, a passage sharing a quarter of its 5-grams with a longer one
+    is a duplicate too (the copies split their passages at other places)
   - at most --max-samples (default 148) are kept, round-robin across
     documents: each document's longest passage first, then the second, ...
 
@@ -109,6 +111,10 @@ EDGE_LINES = 6
 CHROME_MAX_WORDS = 30  # a longer paragraph is prose that mentions a cookie
 MOSTLY_BOILERPLATE = 0.5
 DUPLICATE_SHARE = 0.5
+# Between two copies of one document (HTML vs PDF/DOCX) passages split at other
+# places: the real run kept pairs sharing 0.38 to 0.47. Distinct passages of
+# one article share up to 0.06 (the same phrases repeat).
+COPY_SHARE = 0.25
 
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 HEADING = re.compile(r"^#{1,6}\s")
@@ -832,6 +838,20 @@ def group(items: list[dict], links: list[tuple[str, str]]) -> dict[str, str]:
     return {s: name[root(s)] for s in grams}
 
 
+def drop_copies(kept: list[dict], document: dict[str, str]) -> list[dict]:
+    """In _order, drop each kept passage that shares COPY_SHARE of its 5-grams
+    with a passage kept before it from another source of the same document."""
+    out, out_grams = [], []
+    for c in sorted(kept, key=_order):
+        grams = _grams(c["text"])
+        if not any(o["source"] != c["source"] and document[o["source"]] == document[c["source"]]
+                   and len(grams & g) / max(1, min(len(grams), len(g))) >= COPY_SHARE
+                   for o, g in zip(out, out_grams)):
+            out.append(c)
+            out_grams.append(grams)
+    return out
+
+
 def cap(items: list[dict], max_samples: int) -> list[dict]:
     """At most max_samples, round-robin across documents, longest first."""
     by_doc: dict[tuple, list[dict]] = collections.defaultdict(list)
@@ -930,6 +950,9 @@ def main() -> None:
     kept, stats["duplicate"], links = dedupe(candidates)
     document = group(candidates, links)
     distinct = n_read - sum(s != d for s, d in document.items())
+    copies = drop_copies(kept, document)
+    stats["duplicate"] += len(kept) - len(copies)
+    kept = copies
     picked = cap(kept, args.max_samples)
     stats["over the cap"] = len(kept) - len(picked)
 
