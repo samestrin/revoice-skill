@@ -37,6 +37,9 @@ Anything else is skipped and counted. Then:
     of at most 80 characters among the first or last 6 lines of 3 or more
     documents (a running header, footer or tagline), which is removed
     everywhere. A document that is mostly such lines is dropped whole
+  - a lead-in sentence ending in ":" right before a code block, quote or
+    table that is dropped ("Start using llm-env right away:") is dropped
+    with it: nothing it introduced is left
   - with --before, a document whose front matter date is on or after it is
     dropped; undated documents are kept and counted
   - each document is split into passages of about 350 words (150 to 500,
@@ -136,6 +139,10 @@ CHROME = re.compile(r"(?i)\u00a9|\ball rights reserved\b|\bterms (?:of|and) (?:u
                     r"\bread more\b|\bposted by\b.*\bon\b")
 LEGAL = re.compile(r"(?i)\u00a9|\ball rights reserved\b")  # dropped as a line, whatever the length
 SENTENCE_END = re.compile(r"[.!?][\"'\u201d\u2019)\]]*$")
+# A lead-in is the last sentence of its text and ends in ":"; "vs." and "e.g." end none.
+LEAD_IN_END = re.compile(r":[*_]*$")
+SENTENCE_BREAK = re.compile(r"[.!?][\"'\u201d\u2019)\]]*\s+")
+ABBREVIATIONS = frozenset("vs e.g i.e eg ie etc approx mr mrs ms dr st no".split())
 
 FRONT_MATTER = re.compile(r"\A---[ \t]*\n(.*?)^---[ \t]*$\n?", re.S | re.M)
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -155,6 +162,20 @@ def _paragraphs(text: str) -> list[str]:
         if b.strip():
             out.append(b)
     return out
+
+
+def drop_lead_in(text: str) -> str:
+    """text without its last sentence when that ends in ":", as a lead-in to a block
+    that was dropped does; a heading or any other text is returned as it is."""
+    text = text.rstrip()
+    if HEADING.match(text) or not LEAD_IN_END.search(text):
+        return text
+    start = 0
+    for m in SENTENCE_BREAK.finditer(text):
+        before = text[:m.start()].split()
+        if before and before[-1].lower().strip("(\"'") not in ABBREVIATIONS:
+            start = m.end()
+    return text[:start].rstrip()
 
 
 def _unquote(v: str) -> str:
@@ -220,6 +241,8 @@ class _HTMLText(html.parser.HTMLParser):
             "meta", "source", "track", "wbr"}
     # Checked on their end tag for a terminal-style widget.
     CONTAINER = {"div", "section", "article", "main", "body", "ul", "ol"}
+    # Dropped content: a "...:" lead-in right before one goes with it.
+    LEADS_TO = {"pre", "blockquote", "table"}
 
     def __init__(self):
         super().__init__()
@@ -241,6 +264,8 @@ class _HTMLText(html.parser.HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         if tag in self.SKIP:
+            if tag in self.LEADS_TO and not self.skip and not self.drop_at:
+                self.drop_lead_in()
             self.skip += 1
             return
         if self.skip:
@@ -290,6 +315,20 @@ class _HTMLText(html.parser.HTMLParser):
             if tag in self.CONTAINER and start is not None:
                 self.drop_widget(start)
 
+    def drop_lead_in(self):
+        """The lead-in to a block being dropped: in the open paragraph, or the last one."""
+        pending = "".join(self.buf)
+        if pending.strip():
+            if not self.level:
+                self.buf = [drop_lead_in(" ".join(pending.split())) + " "]
+            return
+        if self.paragraphs:
+            self.paragraphs[-1] = drop_lead_in(self.paragraphs[-1])
+            if not self.paragraphs[-1]:
+                self.paragraphs.pop()
+                n = len(self.paragraphs)
+                self.open = [(t, min(start, n)) for t, start in self.open]
+
     def drop_widget(self, start: int):
         """A container whose lines mostly start with a "$" or ">" prompt is a
         terminal-style widget, not prose: drop all of its lines."""
@@ -319,10 +358,13 @@ W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
 def _docx_paragraphs(el):
+    """The paragraphs, and None where a table is dropped."""
     for child in el:
         if child.tag == W + "p":
             yield child
-        elif child.tag != W + "tbl":
+        elif child.tag == W + "tbl":
+            yield None
+        else:
             yield from _docx_paragraphs(child)
 
 
@@ -339,6 +381,12 @@ def read_docx(path: Path, stem: str):
     body = root.find(W + "body")
     paragraphs = []
     for p in _docx_paragraphs(body if body is not None else root):
+        if p is None:  # a dropped table
+            if paragraphs:
+                paragraphs[-1] = drop_lead_in(paragraphs[-1])
+                if not paragraphs[-1]:
+                    paragraphs.pop()
+            continue
         parts = []
         for el in p.iter():
             if el.tag == W + "t":
@@ -594,6 +642,7 @@ def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Coun
         lines = p.split("\n")
         if fence is None and markdown and all(INDENTED.match(l) for l in lines):
             counts["code"] += len(lines)
+            _drop_lead_in(blocks, [])
             continue
         if (fence is None and len(p.split()) <= CHROME_MAX_WORDS and CHROME.search(p)
                 and not HEADING.match(p) and not any(FENCE.match(l) for l in lines)):
@@ -613,6 +662,7 @@ def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Coun
             if m:
                 fence = m.group(1)
                 counts["code"] += 1
+                _drop_lead_in(blocks, block)
                 continue
             reason = ("table" if TABLE_ROW.match(line) or TABLE_RULE.match(line)
                       or (table and "|" in line)
@@ -631,11 +681,24 @@ def strip_markup(paragraphs: list[str], markdown: bool, counts: collections.Coun
                     block.append(line)
                 continue
             counts[reason] += 1
-            if reason != "table":
+            if reason == "table":
+                _drop_lead_in(blocks, block)
+            else:
                 chrome += len(line.split())
         if block:
             blocks.append(block)
     return blocks, chrome
+
+
+def _drop_lead_in(blocks: list[list[str]], block: list[str]):
+    """Before a dropped code block or table: drop the lead-in that ends the lines
+    kept so far (block, the paragraph being read, or else the last of blocks)."""
+    target = block or (blocks[-1] if blocks else [])
+    if target:
+        kept = drop_lead_in("\n".join(target))
+        target[:] = kept.split("\n") if kept else []
+        if not target and target is not block:
+            blocks.pop()
 
 
 def edge_lines(blocks: list[list[str]]) -> dict[str, str]:

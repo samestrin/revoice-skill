@@ -31,8 +31,12 @@ written so the verdicts can be read.
 In writing and brand, a passage that passes is then cut before it is judged again:
 code, NAME=value and shell command lines (or runs of them inside a line), each
 model answer (from a vendor heading such as "OpenAI Response", found inside a
-joined PDF line too, to the next heading; or the paragraph after a lead-in), and
-a lead-in left with nothing after it ("Common Commands:"). Only the rest is
+joined PDF line too, to the next heading; or the paragraph after a lead-in that
+says the model's words follow, "Here is what ChatGPT said:", or that is quoted),
+and a lead-in left with nothing after it ("Common Commands:"). A lead-in that
+only names a model ("Claude's summary captured the difference:") before the
+author's own paragraph is cut alone, and a title line over a cut lead-in stays
+("Step 1. Checkout ..." over "Clone the repository:"). Only the rest is
 judged and kept: the sample file is rewritten with it, its words column updated,
 and a cut column in index.csv says what was cut. Under MIN_REMAINDER_WORDS left,
 the passage is dropped for what was cut. Email samples are never cut.
@@ -177,6 +181,18 @@ MODEL_NAMES = frozenset(
 MODEL_KINDS = frozenset("ai model assistant bot chatbot".split())
 RESPONSE_WORDS = frozenset("response output answer reply completion".split())
 LEAD_IN_WORDS = 8  # a longer line ending in ":" is a sentence, not a lead-in
+# A lead-in that says the model's words follow ("Here is what ChatGPT said:", "AI21 Studio
+# Response") marks the block after it. One that only names a model ("Claude's summary
+# captured the difference:") marks it only when the block looks quoted (see quoted_block):
+# the reader drops a quote or code block, and the author's own paragraph after it is no
+# answer, so then only the lead-in is cut.
+ANNOUNCES = re.compile(
+    r"\b(said|says|wrote|writes|replied|replies|reply|answered|answers?|responded|responds|"
+    r"responses?|returned|returns|generated|produced|outputs?|completions?)\b", re.I)
+ASSISTANT_OPENER = re.compile(
+    r"^(certainly|sure|of course|absolutely|great question|as an ai\b|i'd be happy|"
+    r"i would be happy)\b", re.I)
+QUOTE_MARKS = "\"\u201c\u2018"  # not "'", an apostrophe too ("'90s")
 # After a "...:" lead-in, this many short lines without sentence punctuation are a quoted block.
 SHORT_BLOCK = 3
 SHORT_LINE_WORDS = 6
@@ -434,10 +450,26 @@ def lead_in_block(raw: list[str], k: int) -> list[int]:
     return block
 
 
+def marks_block(lead_in: str, block: list[str]) -> bool:
+    """The lines after a lead-in are the model's (see ANNOUNCES)."""
+    return bool(ANNOUNCES.search(lead_in)) or quoted_block(block)
+
+
+def quoted_block(block: list[str]) -> bool:
+    """A block that looks quoted: it opens with a quote mark or an assistant's opener
+    ("Certainly!"), or has a "> " quote line, a code line or **bold** in it."""
+    if not block:
+        return False
+    first = block[0].strip().lstrip("*_ ")
+    return (first[:1] in QUOTE_MARKS or bool(ASSISTANT_OPENER.match(first))
+            or any(QUOTE.search(l) or CODE_TOKEN.search(l) or is_cut_code(l) or "**" in l
+                   for l in block))
+
+
 def is_model_output(text: str) -> bool:
-    """Quoted model output: the block after a lead-in (see lead_in_block) is most of the
-    passage; or a "...:" lead-in followed by a block of short lines; or answers under
-    vendor headings are over half of it; or mostly code-like lines."""
+    """Quoted model output: the block after a lead-in (see lead_in_block and marks_block)
+    is most of the passage; or a "...:" lead-in followed by a block of short lines; or
+    answers under vendor headings are over half of it; or mostly code-like lines."""
     lines = lines_of(text)
     total = len(text.split())
     if sum(len(l.split()) for l in lines if CODE_TOKEN.search(l)) > total * MOSTLY:
@@ -446,8 +478,10 @@ def is_model_output(text: str) -> bool:
         return True
     raw = text.splitlines()
     for k, line in enumerate(raw):
-        if line.strip() and is_lead_in(line) and sum(
-                len(raw[j].split()) for j in lead_in_block(raw, k)) > total * MOSTLY:
+        if not line.strip() or not is_lead_in(line):
+            continue
+        block = [raw[j] for j in lead_in_block(raw, k)]
+        if sum(len(l.split()) for l in block) > total * MOSTLY and marks_block(line, block):
             return True
     for k, line in enumerate(lines):
         if not is_lead_in(line):
@@ -471,7 +505,11 @@ def cut(text: str) -> tuple[str, Counter]:
         kind[k] = "model"
     for k, line in enumerate(raw):
         if kind[k] is None and line.strip() and is_lead_in(line):
-            for j in [k, *lead_in_block(raw, k)]:
+            block = lead_in_block(raw, k)
+            if not marks_block(line, [raw[j] for j in block]):
+                kind[k] = "orphan"
+                continue
+            for j in [k, *block]:
                 kind[j] = kind[j] or "model"
     for k, line in enumerate(raw):
         if kind[k] is None and line.strip():
@@ -565,11 +603,19 @@ def shell_runs(line: str) -> list[tuple[int, int]]:
 
 
 def drop_lead_in(text: str) -> tuple[str, int]:
-    """(text without its last sentence, the words of that sentence)."""
+    """(text without its last sentence, the words of that sentence). A title line over
+    the lead-in stays ("Step 1. Checkout comparing-llm-api-performance" over "Clone the
+    repository:"): a line with no ordinary word, or a title-case one, before a line
+    that starts with a capital. A wrapped sentence goes whole."""
     start = 0
     for m in SENTENCE_BREAK.finditer(text):
         word = text[:m.start()].split()[-1].lower() if text[:m.start()].split() else ""
         if word.strip("(\"'") not in ABBREVIATIONS:
+            start = m.end()
+    for m in re.finditer(r"\n", text):
+        head, rest = text[start:m.start()], text[m.end():].lstrip()
+        if (m.start() > start and head.strip() and rest[:1].isupper()
+                and (not any(w in FUNCTION_WORDS for w in words(head)) or is_heading(head))):
             start = m.end()
     return text[:start].rstrip(), len(text[start:].split())
 

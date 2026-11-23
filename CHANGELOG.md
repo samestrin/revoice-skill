@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-23
+
+### Fixed
+
+- `review-samples.py --mode writing|brand`: a lead-in that only names a model, such as "Claude's summary captured the difference:", no longer cuts the paragraph after it unless that paragraph looks quoted (it opens with a quote mark or "Certainly", or has a `>` quote line, a code line or `**bold**`); otherwise only the lead-in line is cut (`orphan lead-in` in the `cut` column). A lead-in that says the model's words follow ("Here is what ChatGPT said:", "The assistant's answer:", "AI21 Studio Response") still marks the paragraph after it. In the 0.3.2 real test, the author's own conclusion "What began as an experiment revealed something bigger: …" was cut because the reader had already dropped the real quote.
+- `extract-documents.py` drops a lead-in sentence ending in ":" together with the code block, quote or table it introduced (an HTML `<pre>`, `<blockquote>` or `<table>`, a markdown fence, indented code or pipe table, a DOCX table). In the 0.3.2 real test, "Start using llm-env right away:" and "Environment‑aware deployment:" were kept with nothing after them. A lead-in to a list or text that is kept stays ("A single script that:").
+- `review-samples.py`: cutting an orphan lead-in keeps a title line above it in a PDF passage. In the 0.3.2 real test, "Step 1. Checkout comparing-llm-api-performance" over "Clone the repository:" became a bare "Step 1.". A sentence wrapped across lines is still cut whole.
+
 ## [0.3.2] - 2026-11-23
 
 ### Fixed

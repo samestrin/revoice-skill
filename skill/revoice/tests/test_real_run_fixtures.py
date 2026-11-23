@@ -29,6 +29,7 @@ EXPECTED = [
     "env_shell_pdf.md",
     "llm_output_pdf_joined.md", "env_shell_pdf_minority.md",
     "leadin_72faster_04.md", "orphan_llmenv_01.md",
+    "orphan_leadins_llmenv.html", "leadin_72faster_quote.html",
     "table_docx_numbers.md",
     "brand_icons_widgets.html",
     "copy_article_html.md", "copy_article_pdf.txt", "copy_article_docx.md",

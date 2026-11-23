@@ -394,7 +394,9 @@ class OrphanLeadInTest(Base):
                  "</td></tr></table>", ["We compared them, e.g. by speed vs. cost."]),
                 ("<p>As she put it:</p><blockquote>QUOTE</blockquote><p>I agree.</p>", ["I agree."]),
                 ("<p>Run <em>this</em> <code>now</code>:</p><div><pre>x</pre></div>", []),
-                ("<p>**Steps:**</p><pre>x</pre>", [])):
+                ("<p>**Steps:**</p><pre>x</pre>", []),
+                # A <pre> inside the paragraph: the text after it goes on.
+                ("<p>It is short. Install it with:<pre>x</pre>Then go.</p>", ["It is short. Then go."])):
             with self.subTest(html):
                 self.assertEqual(ed.read_html(html, "stem")[2], want)
 

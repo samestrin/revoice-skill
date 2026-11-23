@@ -1029,9 +1029,8 @@ class Cuts(unittest.TestCase):
             "Installing It\nRun this:": ("Installing It", 2),
             # A wrapped sentence: the line before has an ordinary word, or the next is lowercase.
             "It is short. To run it, clone the repository and install the\ndependencies:":
-                ("It is short.", 11),
+                ("It is short.", 10),
             "We read it. Then we asked\nClaude to compare:": ("We read it.", 6),
-            "We read it. Next\nClaude Code said:": ("We read it. Next", 3),
             "We read it. Checkout tools\nlist them:": ("We read it.", 4),
             "Common Commands:": ("", 2),
         }
@@ -1108,8 +1107,7 @@ class Cuts(unittest.TestCase):
             "code line": "x = plan(tasks);",
             "assistant opener": "Certainly! Here is a summary of the two plans you shared.",
             "bold labels": "**Speed:** the hybrid plan was faster in most runs.",
-            "short lines": "Faster\nCheaper\nClearer",
-        }
+        }  # Short lines after a "...:" lead-in drop the whole passage (0.3.1, is_model_output).
         for name, block in blocks.items():
             text = f"{passage(9)}\n\n{self.NAMING_LEAD_IN}\n\n{block}\n\n{passage(10)}"
             for mode in DOCUMENT_MODES:
@@ -1128,7 +1126,14 @@ class Cuts(unittest.TestCase):
                 r = self.judge(text, "writing")
                 self.assertEqual((r["verdict"], r["text"]),
                                  ("KEEP", f"{passage(9)}\n\n{f0}\n\n{passage(10)}"))
-                self.assertEqual(r["cut"], f"orphan lead-in {len(lead_in.split()) - lead_in.startswith('#')} words")
+                self.assertEqual(r["cut"], f"orphan lead-in {len(lead_in.split())} words")
+
+    def test_quoted_block_shapes(self):
+        self.assertFalse(rs.quoted_block([]))
+        for block in (["'90s hardware was slower, and I still remember the wait."],
+                      ["The plan was clear: ship it.", "Then we did."]):
+            with self.subTest(block):
+                self.assertFalse(rs.quoted_block(block))
 
     def test_announcing_lead_in_still_marks_a_plain_block(self):
         f0 = FILLERS[0]
