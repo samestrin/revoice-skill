@@ -39,6 +39,9 @@ F1 (EST-8141), whole samples: `llm_output_docx_c.md` (`_05_9b359e`) and
 `Small Model Responses (OpenAI)`, KEEP on 9ed1577 (the bug);
 `llm_output_pdf_b.md` (`_11_dd3091`), vendor responses, already DROP.
 
+F4: `env_shell_pdf.md` (`_10`, KEEP on 9ed1577) is a
+reconstruction of the reported shape, not verbatim.
+
 ## (c) The one-number-per-line table (bug 6)
 
 `table_docx_numbers.md` — DOCX sample `_03_0439f8` whole: the small-model

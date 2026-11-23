@@ -594,6 +594,7 @@ REAL_LLM_OUTPUT = {n: real_run_body(f"{n}.md")
 REAL_VENDOR_SECTIONS = {n: real_run_body(f"{n}.md")
                         for n in ("llm_output_docx_c", "llm_output_docx_d", "llm_output_pdf_b")}
 REAL_TABLE = real_run_body("table_docx_numbers.md")
+REAL_ENV_SHELL = real_run_body("env_shell_pdf.md")
 DOCUMENT_MODES = ("writing", "brand")
 
 
@@ -819,6 +820,80 @@ class RealRun(unittest.TestCase):
         self.assertTrue(rs.is_heading("The quality of the results", alone=True))
         self.assertFalse(rs.is_heading("requests in a given", alone=True))
         self.assertFalse(rs.is_heading("Low latency LLMs are crucial.", alone=True))
+
+    # 0.3.2 fix F4 (EST-8144): a setup section whose code formatting the PDF lost,
+    # NAME=value lines and bare shell commands read as prose lines.
+    def test_real_env_and_shell_passage_dropped(self):
+        # PDF sample _10 was KEEP "own writing" on 9ed1577.
+        for mode in rs.MODES:
+            with self.subTest(mode):
+                r = self.judge(REAL_ENV_SHELL, mode)
+                self.assertEqual((r["verdict"], r["reason"]), ("DROP", "list, table, code or log"))
+
+    def test_real_prose_kept_beside_env_and_shell_passage(self):
+        texts = [*REAL_PROSE, REAL_ENV_SHELL]
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                out = rs.review(texts, "Sam Estrin", mode)[:len(REAL_PROSE)]
+                self.assertEqual([(o["verdict"], o["reason"]) for o in out],
+                                 [("KEEP", "own writing")] * len(REAL_PROSE))
+
+    def test_env_and_shell_shapes_dropped(self):
+        cases = {
+            "env lines": "Put these in your .env file.\nOPENAI_API_KEY=\nGROQ_API_KEY=abc123\n"
+                         "export MISTRAL_API_KEY=\"your key\"\nDEBUG=1",
+            "several on one line": "The keys:\nAI21_API_KEY= COHERE_API_KEY=\nREKA_API_KEY= GROQ_API_KEY=",
+            "shell commands": "Install it like this.\ngit clone https://github.com/example/tool.git\n"
+                              "cd tool\npip install -r requirements.txt\n$ npm run build",
+        }
+        for name, text in cases.items():
+            for mode in rs.MODES:
+                with self.subTest(name, mode=mode):
+                    r = self.judge(text, mode)
+                    self.assertEqual((r["verdict"], r["reason"]), ("DROP", "list, table, code or log"))
+
+    def test_prose_mentioning_env_and_shell_kept(self):
+        f0, f1, f2 = FILLERS
+        cases = [
+            # Sentences that name a variable or a command.
+            f"I keep AI21_API_KEY= and OPENAI_API_KEY= in a .env file, never in the code.\n\n{f0}",
+            f"Run npm install, then git clone the repo you want to test.\n\n{f0}\n\n{f1}",
+            # pdftotext wraps that start with a command word but go on as a sentence.
+            "Once that was done I opened a terminal, and to set things up I ran\n"
+            "npm install and then waited for the build to finish, which took\n"
+            "export of the old data to a new folder before we could start again\n"
+            "cd collection from the attic was the first thing we looked at\n" + f2,
+            # A short prose line with a capitalised command word.
+            f"Export the report\n\nCurl up with it\n\n{f0}\n\n{f1}",
+            # An equals sign inside prose, and a lowercase name=value.
+            f"The ratio was X = 2 in every run we tried.\n\nretries=3 seemed fine to me\n\n{f0}",
+            # Short sentences that start with a command and hold no function word (Reviewer, PR #124).
+            "npm install failed.\ngit clone crashed.\npip install broke.\ndocker build failed.\n" + f0,
+        ]
+        for text in cases:
+            for mode in rs.MODES:
+                with self.subTest(text[:40], mode=mode):
+                    self.assertEqual(self.judge(text, mode)["verdict"], "KEEP")
+
+    def test_code_lines(self):
+        for line in ("AI21_API_KEY=", "OPENAI_API_KEY=sk-test", 'export GROQ_API_KEY="a key"',
+                     "AI21_API_KEY= COHERE_API_KEY=", "DEBUG=1",
+                     "git clone https://github.com/samestrin/llm-api-performance-evaluation.git",
+                     "cd llm-api-performance-evaluation", "npm install", "npx tsc --noEmit",
+                     "pip install -r requirements.txt", "export PATH", "node testLatency.js",
+                     "  curl -s https://example.com/v1 -H 'Accept: application/json'",
+                     "$ yarn add llm-interface", "python3 -m venv .venv", "    return a + b"):
+            with self.subTest(line):
+                self.assertTrue(rs.is_code(line))
+        for line in ("I keep AI21_API_KEY= in a .env file.", "X = 2", "retries=3", "Export the report",
+                     "npm install and then waited for the build to finish, which took",
+                     "export of the old data to a new folder", "cd collection from the attic",
+                     "git is the tool I use every day.", "node", "Set A=1 first.", "",
+                     # Only the sentence end tells these from a command.
+                     "npm install failed.", "git clone crashed.", "pip install broke!",
+                     "docker build failed?"):
+            with self.subTest(line):
+                self.assertFalse(rs.is_code(line))
 
 
 class CliContract(unittest.TestCase):
