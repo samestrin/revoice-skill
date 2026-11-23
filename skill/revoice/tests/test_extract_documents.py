@@ -1090,6 +1090,52 @@ class OneDocumentTest(PassageBase):
         self.assertRegex(run.stdout, r"duplicate\s*: 1")
         self.assertIn("read 2 documents, wrote", run.stdout)
 
+    def copies(self, phrase: str, run: Run) -> int:
+        """How many samples hold phrase (apostrophes folded: the DOCX copy curls them)."""
+        return sum(phrase in s.replace("’", "'") for s in self.samples(run))
+
+    def test_html_and_docx_copies_keep_the_shared_text_once(self):
+        # F5 (0.3.2): docx#2 shares 0.44 of its 5-grams with html#1, under
+        # DUPLICATE_SHARE; 9ed1577 kept both, so the text is in the profile twice.
+        self.write("article.md", real_run("copy_article_html.md"))
+        self.write("article-docx.md", real_run("copy_article_docx.md"))
+        run = self.run_script(self.docs)
+        self.assertEqual(self.copies("That's why it's important to note", run), 1)
+        self.assertEqual(len(run.rows), 2)
+        self.assertRegex(run.stdout, r"duplicate\s*: 2")
+        self.assertIn("read 2 documents (1 distinct), wrote 2 samples", run.stdout)
+
+    def test_html_and_pdf_copies_keep_the_shared_text_once(self):
+        # F5 (0.3.2): html#1 shares 0.47 of its 5-grams with pdf#1; 9ed1577 kept both.
+        self.write("article.md", real_run("copy_article_html.md"))
+        self.write("article-pdf.txt", real_run("copy_article_pdf.txt"))
+        run = self.run_script(self.docs)
+        self.assertEqual(self.copies("Ranked by quality of content, average response time", run), 1)
+        self.assertEqual(len(run.rows), 2)
+        self.assertRegex(run.stdout, r"duplicate\s*: 2")
+
+    def test_distinct_passages_of_one_article_are_all_kept(self):
+        # pdf#1, docx#1 and docx#2 share at most 0.06 of their 5-grams (the
+        # article repeats "an average latency of"): no copy of each other.
+        self.write_real_run()
+        run = self.run_script(self.docs)
+        article = sorted((r["subject"], int(r["words"])) for r in run.rows
+                         if r["subject"].startswith("article"))
+        self.assertEqual(article, [("article-docx", 160), ("article-docx", 359),
+                                   ("article-pdf", 411)])
+
+    def test_two_documents_sharing_two_fifths_of_a_passage_keep_both(self):
+        # COPY_SHARE is only for copies of one document: a passage that quotes
+        # 0.4 of another document's passage is still its own writing.
+        quoted, own = ((" ".join(real_run_body(f"prose_{n}.md") for n in names)).split()
+                       for names in (("comparing13_a", "72faster_b", "llmenv_b"),
+                                     ("72faster_a", "llmenv_a")))
+        self.write("quoted.md", " ".join(quoted))
+        self.write("quoting.md", " ".join(quoted[:120] + own[:180]))
+        run = self.run_script(self.docs)
+        self.assertEqual(sorted(run.by_source), ["quoted.md", "quoting.md"])
+        self.assertIn("read 2 documents, wrote 2 samples", run.stdout)
+
     def test_output_is_identical_when_the_real_run_inputs_are_given_in_reverse_order(self):
         paths = self.write_real_run()
 
