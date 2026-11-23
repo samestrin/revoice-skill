@@ -27,6 +27,8 @@ EXPECTED = [
     "llm_output_docx_a.md", "llm_output_docx_b.md", "llm_output_pdf_a.md",
     "llm_output_docx_c.md", "llm_output_docx_d.md", "llm_output_pdf_b.md",
     "env_shell_pdf.md",
+    "llm_output_pdf_joined.md", "env_shell_pdf_minority.md",
+    "leadin_72faster_04.md", "orphan_llmenv_01.md",
     "table_docx_numbers.md",
     "brand_icons_widgets.html",
     "copy_article_html.md", "copy_article_pdf.txt", "copy_article_docx.md",

@@ -896,6 +896,196 @@ class RealRun(unittest.TestCase):
                 self.assertFalse(rs.is_code(line))
 
 
+REAL_JOINED_RESPONSE = real_run_body("llm_output_pdf_joined.md")
+REAL_ENV_SHELL_MINORITY = real_run_body("env_shell_pdf_minority.md")
+REAL_LEAD_IN = real_run_body("leadin_72faster_04.md")
+REAL_ORPHANS = real_run_body("orphan_llmenv_01.md")
+CODE_LEFTOVERS = ("_API_KEY=", "_ACCOUNT_ID=", "git clone", "cd comparing", "npm install",
+                  "node testLLMPerformance.js", "Clone the repository:",
+                  "Install the required npm packages:")
+
+
+class Cuts(unittest.TestCase):
+    """0.3.2 fix (EST-8273): code lines, model answers and their orphan lead-ins are cut
+    out of a passage before it is judged, and only the rest is kept and uploaded."""
+
+    def judge(self, text, mode):
+        # Not REAL_PROSE: prose_llmenv_a is the 0.3.0 copy of REAL_ORPHANS (a form letter).
+        return rs.review([text, *FILLERS, *(passage(i) for i in range(6))], "Sam Estrin", mode)[0]
+
+    def assert_kept_without(self, r, gone, kept, cut_label):
+        self.assertEqual((r["verdict"], r["reason"]), ("KEEP", "own writing"))
+        for s in gone:
+            self.assertNotIn(s, r["text"])
+        for s in kept:
+            self.assertIn(s, r["text"])
+        self.assertIn(cut_label, r["cut"])
+
+    def test_real_joined_vendor_response_cut(self):
+        # PDF sample _11 was KEEP on c64b04b with the OpenAI answer in one joined line.
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                self.assert_kept_without(
+                    self.judge(REAL_JOINED_RESPONSE, mode),
+                    ["OpenAI Response", "Last Level Memory", "low latency LLMs"],
+                    ["The Reka AI API requires a credit card", "Just skip down to their responses."],
+                    "quoted model output")
+
+    def test_markers_inside_a_joined_line(self):
+        found = {
+            "Why? Just skip down to their responses. OpenAI Response Low latency Last Level":
+                "OpenAI Response Low latency Last Level",
+            "We read them all. Small Model Responses (OpenAI) The first answer was short.":
+                "Small Model Responses (OpenAI) The first answer was short.",
+            "Large Model Responses (Google Gemini) Low latency LLMs matter.":
+                "Large Model Responses (Google Gemini) Low latency LLMs matter.",
+            "That was all. AI21 Studio Response Low latency Large Language Models":
+                "AI21 Studio Response Low latency Large Language Models",
+            "The results, see below: Claude Responses 1. Speed":
+                "Claude Responses 1. Speed",
+        }
+        for line, rest in found.items():
+            with self.subTest(line):
+                self.assertEqual(line[rs.marker_start(line):], rest)
+        for line in ("I read the OpenAI responses (Claude) again.",
+                     "We compared the OpenAI Response times of each provider.",
+                     "How Did the LLM APIs Respond? (Small Models) Reviewing the actual responses",
+                     "Then came the Incident Response Plan. Customer Responses (Survey) Fine.",
+                     "It ended. Pricing (OpenAI) Free tier.",
+                     "It ended. OpenAI Response times were fine.",
+                     "Reka AI API Keys How Did the LLM APIs Respond?", ""):
+            with self.subTest(line):
+                self.assertIsNone(rs.marker_start(line))
+
+    def test_real_env_and_shell_minority_cut(self):
+        # PDF sample _10 was KEEP on c64b04b: the code lines were under half the passage.
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                self.assert_kept_without(
+                    self.judge(REAL_ENV_SHELL_MINORITY, mode), CODE_LEFTOVERS,
+                    ["Goose AI is a commercial product", "Step 3. Create your .env File",
+                     "If you’d like to reproduce my test"],
+                    "code")
+
+    def test_env_and_shell_runs_inside_a_joined_line(self):
+        joined = " ".join(REAL_ENV_SHELL_MINORITY.split("\n"))
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                self.assert_kept_without(
+                    self.judge(joined, mode), CODE_LEFTOVERS,
+                    ["Goose AI is a commercial product", "Step 4. Run The Tests"], "code")
+
+    def test_prose_runs_with_command_words_are_not_cut(self):
+        f0, f1 = FILLERS[:2]
+        for text in (f"I ran npm install and then waited. {f0} {f1}",
+                     f"Note: git rebase works. {f0} {f1}",
+                     f"I use node every day at work. {f0} {f1}",
+                     f"Set A=1 first, then B=2. {f0} {f1}",
+                     f"I keep AI21_API_KEY= and OPENAI_API_KEY= in a .env file. {f0} {f1}",
+                     f"It gets the CPU to access data;\nthat is all. {f0} {f1}"):
+            for mode in DOCUMENT_MODES:
+                with self.subTest(text[:30], mode=mode):
+                    r = self.judge(text, mode)
+                    self.assertEqual((r["verdict"], r["text"], r["cut"]), ("KEEP", text, ""))
+
+    def test_real_lead_in_marks_only_its_block(self):
+        # Article 2 _04 (the author's conclusion) was DROP "quoted model output" on c64b04b.
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                self.assert_kept_without(
+                    self.judge(REAL_LEAD_IN, mode), ["Claude's summary captured the difference:"],
+                    ["Speed: Hybrid often faster", "The choice isn't between tools",
+                     "Responsible use is essential."],
+                    "quoted model output")
+        self.assertFalse(rs.is_model_output(REAL_LEAD_IN))
+
+    def test_lead_in_block_ends_at_the_blank_line(self):
+        f0, f1, f2 = FILLERS
+        r = self.judge(f"Here is what ChatGPT said:\n{f0}\n\n{f1}\n\n{f2}", "writing")
+        self.assertEqual((r["verdict"], r["text"]), ("KEEP", f"{f1}\n\n{f2}"))
+
+    def test_real_orphan_lead_ins_dropped(self):
+        # The HTML reader dropped the code blocks after these lines; c64b04b kept them.
+        for mode in DOCUMENT_MODES:
+            with self.subTest(mode):
+                self.assert_kept_without(
+                    self.judge(REAL_ORPHANS, mode),
+                    ["Before vs. After:", "Common Commands:", "Quickly install llm-env with:",
+                     "Add your keys to your shell profile (examples):"],
+                    ["A single script that:", "Most AI tools already expect these variables:",
+                     "Security is a top priority:", "Start using llm-env right away:"],
+                    "orphan lead-in")
+
+    def test_orphan_lead_in_sentence_after_cut_code(self):
+        f0, f1 = FILLERS[:2]
+        text = (f"{f0} {f1}\n\nIt is short. To run it, clone the repository and install the\n"
+                "dependencies:\ngit clone https://github.com/example/tool.git\nnpm install\n\n"
+                f"{FILLERS[2]}")
+        r = self.judge(text, "writing")
+        self.assertEqual(r["text"], f"{f0} {f1}\n\nIt is short.\n\n{FILLERS[2]}")
+        self.assertIn("orphan lead-in", r["cut"])
+
+    def test_short_remainder_dropped(self):
+        # Answers under half the passage are cut; the rest must reach MIN_REMAINDER_WORDS.
+        def prose(n):
+            return " ".join(("the cat and the dog " * 20).split()[:n])
+
+        def text(n):
+            return prose(n) + "\n\nClaude Responses\n\n" + " ".join(["answer"] * 10)
+        for n, verdict in ((rs.MIN_REMAINDER_WORDS - 1, "DROP"), (rs.MIN_REMAINDER_WORDS, "KEEP")):
+            with self.subTest(n):
+                r = rs.review([text(n), *FILLERS], "", "writing")[0]
+                self.assertEqual(r["verdict"], verdict)
+                if verdict == "DROP":
+                    self.assertEqual(r["reason"], "quoted model output")
+        r = rs.review([f"{prose(40)}\n\nThe keys:\nAI21_API_KEY=", *FILLERS], "", "brand")[0]
+        self.assertEqual((r["verdict"], r["reason"]), ("DROP", "list, table, code or log"))
+
+    def test_real_prose_is_not_cut(self):
+        for mode in DOCUMENT_MODES:
+            out = rs.review(REAL_PROSE, "Sam Estrin", mode)
+            for text, r in zip(REAL_PROSE, out):
+                with self.subTest(text[:30], mode=mode):
+                    self.assertEqual((r["verdict"], r["cut"], r["text"]), ("KEEP", "", text))
+
+    def test_email_mode_cuts_nothing(self):
+        for text in (REAL_ENV_SHELL_MINORITY, REAL_LEAD_IN, REAL_ORPHANS):
+            r = rs.review([text, *FILLERS], "Sam Estrin")[0]
+            self.assertEqual((r["cut"], r["text"]), ("", text))
+
+    def test_main_writes_the_remainder_and_the_cut_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            texts = [REAL_JOINED_RESPONSE, *(passage(i) for i in range(10))]
+            passage_dir(d, texts, [f"doc{i}" for i in range(len(texts))])
+            run_main(rs, "--samples", str(d), "--mode", "writing", "--author", "Sam Estrin")
+            first = (d / "000-p.md").read_text(encoding="utf-8")
+            with open(d / "index.csv", newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+            self.assertTrue(first.startswith("# Title 0\n"))
+            self.assertNotIn("Last Level Memory", first)
+            self.assertIn("Reka AI API Keys", first)
+            self.assertEqual(rows[0]["verdict"], "KEEP")
+            self.assertIn("quoted model output", rows[0]["cut"])
+            self.assertEqual(rows[0]["words"], str(len(rs.body(d / "000-p.md").split())))
+            self.assertEqual({r["cut"] for r in rows[1:]}, {""})
+            self.assertEqual(rows[1]["words"], "100")
+            # A rerun finds nothing more to cut and keeps the note.
+            run_main(rs, "--samples", str(d), "--mode", "writing", "--author", "Sam Estrin")
+            self.assertEqual((d / "000-p.md").read_text(encoding="utf-8"), first)
+            with open(d / "index.csv", newline="", encoding="utf-8") as f:
+                self.assertEqual(list(csv.DictReader(f))[0]["cut"], rows[0]["cut"])
+
+    def test_dropped_passage_file_is_left_whole(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            texts = [REAL_ENV_SHELL, *(passage(i) for i in range(10))]
+            passage_dir(d, texts, [f"doc{i}" for i in range(len(texts))])
+            before = (d / "000-p.md").read_text(encoding="utf-8")
+            run_main(rs, "--samples", str(d), "--mode", "brand")
+            self.assertEqual((d / "000-p.md").read_text(encoding="utf-8"), before)
+
+
 class CliContract(unittest.TestCase):
     """The output build-profile.py reads, and the command line build.md calls."""
 
