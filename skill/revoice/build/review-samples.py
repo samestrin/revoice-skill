@@ -275,29 +275,37 @@ def is_vendor_heading(line: str) -> bool:
     return last.lower() in HEADING_RESPONSE_WORDS and is_model_name(name)
 
 
-def is_heading(line: str) -> bool:
+def is_heading(line: str, alone: bool = False) -> bool:
     """A short title-case line, or a markdown heading: it ends a vendor heading's section.
+    With alone (the line is its own paragraph), a sentence-case line is one too.
 
     A pdftotext line wrap, a bold "Label:" or a list item inside the answer is none.
     """
     if line.lstrip().startswith("#"):
         return True
+    if BULLET.search(line):
+        return False
     line = line.strip().strip("*_ ").strip()
     toks = line.split()
-    if (not toks or len(toks) > LEAD_IN_WORDS or line[-1] in ".:;,"
-            or "," in line or BULLET.search(line)):
+    if not toks or len(toks) > LEAD_IN_WORDS or line[-1] in ".:;," or "," in line:
         return False
     caps = [t for t in (t.lstrip("(\"'“") for t in toks) if t and t[0].isalpha()]
-    return bool(caps) and all(t[0].isupper() or t.lower() in FUNCTION_WORDS for t in caps)
+    if not caps or not caps[0][0].isupper():
+        return False
+    return alone or all(t[0].isupper() or t.lower() in FUNCTION_WORDS for t in caps)
 
 
-def vendor_section_words(lines: list[str]) -> int:
+def vendor_section_words(text: str) -> int:
     """Words under vendor headings (the headings too), each up to the next heading."""
+    raw = text.splitlines()
     n, inside = 0, False
-    for l in lines:
+    for k, l in enumerate(raw):
+        if not l.strip():
+            continue
+        alone = (k == 0 or not raw[k - 1].strip()) and (k + 1 == len(raw) or not raw[k + 1].strip())
         if is_vendor_heading(l):
             inside = True
-        elif is_heading(l):
+        elif is_heading(l, alone):
             inside = False
         if inside:
             n += len(l.split())
@@ -312,7 +320,7 @@ def is_model_output(text: str) -> bool:
     total = len(text.split())
     if sum(len(l.split()) for l in lines if CODE_TOKEN.search(l)) > total * MOSTLY:
         return True
-    if vendor_section_words(lines) > total * MOSTLY:
+    if vendor_section_words(text) > total * MOSTLY:
         return True
     for k, line in enumerate(lines):
         if not is_lead_in(line):

@@ -748,6 +748,12 @@ class RealRun(unittest.TestCase):
                     r = self.judge(text, mode)
                     self.assertEqual((r["verdict"], r["reason"]), ("DROP", "quoted model output"))
 
+    def test_wrapped_short_line_stays_in_the_section(self):
+        # A short capitalised pdftotext wrap is not its own paragraph, so the answer goes on.
+        f0, f1, f2 = FILLERS
+        text = f"{f2}\n\nOpenAI Response\n{f0}\nLow latency LLMs\n{f1}"
+        self.assertTrue(rs.is_model_output(text))
+
     def test_vendor_heading_sections_under_half_kept(self):
         f0, f1, f2 = FILLERS
         cases = [
@@ -762,6 +768,10 @@ class RealRun(unittest.TestCase):
             f"How Did the LLM APIs Respond? (Small Models)\n\n{f0}\n\n{f1}",
             # A sentence that names a vendor and responses is not a heading.
             f"I read the OpenAI responses (Claude) again.\n\n{f0}\n\n{f1}",
+            # The author's next section has a sentence-case heading (Reviewer, PR #123).
+            f"Small Model Responses (OpenAI)\n\n{f0}\n\nThe quality of the results\n\n{f1}\n\n{f2}",
+            # A plural heading is not a lead-in; the author's title-case heading ends it.
+            f"{f0}\n\nGroq Responses\n\nIt was fine.\n\nWhat I Took From It\n\n{f1}\n\n{f2}",
         ]
         for text in cases:
             for mode in DOCUMENT_MODES:
@@ -785,7 +795,8 @@ class RealRun(unittest.TestCase):
                      "How Did the LLM APIs Respond? (Small Models)", "Incident Responses (Q3)",
                      "Pricing (OpenAI)", "Customer Responses", "AI Incident Response",
                      "Here is what ChatGPT said:", "I read the OpenAI responses (Claude) again.",
-                     "the CPU to access data stored in memory. This is crucial for improving"):
+                     "the CPU to access data stored in memory. This is crucial for improving",
+                     "Limited Response Tokens Extremely Small Sample Size Made OpenAI Responses", ""):
             with self.subTest(line):
                 self.assertFalse(rs.is_vendor_heading(line))
 
@@ -799,9 +810,15 @@ class RealRun(unittest.TestCase):
                      "1. **Real-time Applications**: LLMs with low latency are essential for",
                      "Low latency Large Language Models (LLMs) are crucial for several",
                      "Google Gemini, Anthropic, and Perplexity", "smartphones or embedded devices.",
-                     "harmless, and honest.", ""):
+                     "harmless, and honest.", "", "* Chatbots And Virtual Assistants",
+                     "The Results Of The Tests We Ran Over Two Long Weeks",
+                     "The quality of the results"):
             with self.subTest(line):
                 self.assertFalse(rs.is_heading(line))
+        # On its own paragraph a sentence-case line is a heading; a lowercase wrap never is.
+        self.assertTrue(rs.is_heading("The quality of the results", alone=True))
+        self.assertFalse(rs.is_heading("requests in a given", alone=True))
+        self.assertFalse(rs.is_heading("Low latency LLMs are crucial.", alone=True))
 
 
 class CliContract(unittest.TestCase):
