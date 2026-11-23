@@ -10,7 +10,7 @@ standard library only and makes no network call.
 A sample is DROPPED when it is: broken extraction (mostly signature or contact
 lines, many replacement or non-letter characters, or cut off mid-sentence and
 very short); mostly quoted, forwarded or boilerplate lines; mostly list, table,
-code or log lines; a near-duplicate form letter within the set; not in the
+code or log lines (code includes NAME=value settings and shell commands); a near-duplicate form letter within the set; not in the
 author's usual language; or signed with a clearly different name than --author.
 score is 1-5 from prose length and paragraph structure. reason is one fixed
 label (see REASONS), never a quote from the email.
@@ -129,6 +129,14 @@ BOILERPLATE = re.compile(
 BULLET = re.compile(r"^\s*([-*\u2022\u25cf]|\d{1,3}[.)])\s+\S")
 TABLE = re.compile(r"\|.*\||\t\S.*\t|\S {3,}\S.* {3,}\S")
 CODE = re.compile(r"^(\t| {4})\s*\S|^\s*(def |class |import |from \S+ import |#include|\$ |```)|[{};]\s*$")
+# A PDF loses code formatting, so a setup section reads as lines like these: one or more
+# "NAME=value" settings ("AI21_API_KEY=", "export DEBUG=1"), or a shell command. A command is
+# a lowercase command word with at least one argument and no ordinary English word, so a
+# wrapped sentence that starts with one ("npm install and then waited for...") is prose.
+ENV_LINE = re.compile(r"""^\s*(export\s+)?([A-Z][A-Z0-9_]+=("[^"]*"|'[^']*'|\S*)(\s+|$))+$""")
+SHELL_LINE = re.compile(
+    r"^\s*(\$\s+)?(git|npm|npx|pnpm|yarn|pip3?|python3?|node|export|cd|curl|wget|docker|brew|"
+    r"sudo|mkdir|chmod)\s+\S")
 LOG = re.compile(
     r"^\s*\[?(\d{4}-\d\d-\d\d[ T]\d\d:\d\d|\d\d:\d\d:\d\d|"
     r"(TRACE|DEBUG|INFO|WARN(ING)?|ERROR|FATAL)\b)")
@@ -238,8 +246,16 @@ def is_quoted(text: str) -> bool:
 
 def is_structured(text: str) -> bool:
     lines = lines_of(text)
-    n = sum(1 for l in lines if BULLET.search(l) or TABLE.search(l) or CODE.search(l) or LOG.search(l))
+    n = sum(1 for l in lines if BULLET.search(l) or TABLE.search(l) or is_code(l) or LOG.search(l))
     return n >= 2 and n / len(lines) >= MOSTLY
+
+
+def is_code(line: str) -> bool:
+    """A code line, a NAME=value setting or a shell command (see ENV_LINE, SHELL_LINE)."""
+    if CODE.search(line) or ENV_LINE.match(line):
+        return True
+    return (bool(SHELL_LINE.match(line)) and not SENTENCE_END.search(line.strip())
+            and not any(w in FUNCTION_WORDS for w in words(line)))
 
 
 def is_lead_in(line: str) -> bool:

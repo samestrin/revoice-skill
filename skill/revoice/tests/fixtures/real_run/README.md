@@ -39,12 +39,8 @@ F1 (EST-8141), whole samples: `llm_output_docx_c.md` (`_05_9b359e`) and
 `Small Model Responses (OpenAI)`, KEEP on 9ed1577 (the bug);
 `llm_output_pdf_b.md` (`_11_dd3091`), vendor responses, already DROP.
 
-F4 (EST-8144): `env_shell_pdf.md` stands for PDF sample `_10` of the 0.3.1
-re-test, KEEP on 9ed1577 (the bug). It is a reconstruction, not a verbatim
-excerpt: the operator's `rv-e2e-031/` evidence was not readable from the
-builder's checkout. It has the shape the owner reported: the article's setup
-section with the code formatting lost, 13 `AI21_API_KEY=`-style lines (one
-per provider named in the article) plus the git, cd, npm and node commands.
+F4: `env_shell_pdf.md` (`_10`, KEEP on 9ed1577) is a
+reconstruction of the reported shape, not verbatim.
 
 ## (c) The one-number-per-line table (bug 6)
 
